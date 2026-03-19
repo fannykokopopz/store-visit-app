@@ -24,6 +24,18 @@ function doPost(e) {
     if (cache.get(key)) return ContentService.createTextOutput('OK');
     cache.put(key, '1', 60);
 
+    // Ignore stale messages (queued overnight replays)
+    const msgDate = update.message
+      ? update.message.date
+      : update.callback_query
+        ? update.callback_query.message.date
+        : null;
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (msgDate && (nowSec - msgDate) > 300) {
+      Logger.log('Dropped stale update ' + update.update_id + ' (' + (nowSec - msgDate) + 's old)');
+      return ContentService.createTextOutput('OK');
+    }
+
     handleUpdate(update);
   } catch (err) {
     Logger.log('doPost error: ' + err.message);
@@ -346,7 +358,26 @@ function registerWebhook() {
   const webAppUrl = props.WEB_APP_URL; // Set this to your deployed Apps Script URL
 
   const response = UrlFetchApp.fetch(
-    `https://api.telegram.org/bot${token}/setWebhook?url=${webAppUrl}`
+    `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webAppUrl)}`
   );
   Logger.log(response.getContentText());
+}
+
+// ── Reset webhook — clears ALL pending queued messages ───────────────────────
+// Run this manually whenever the bot has been spamming stale messages
+function resetWebhook() {
+  const props = PropertiesService.getScriptProperties().getProperties();
+  const token = props.TELEGRAM_TOKEN;
+  const webAppUrl = props.WEB_APP_URL;
+
+  // Delete first — drop_pending_updates=true wipes the entire backlog
+  UrlFetchApp.fetch(
+    `https://api.telegram.org/bot${token}/deleteWebhook?drop_pending_updates=true`
+  );
+
+  // Re-register
+  const res = UrlFetchApp.fetch(
+    `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webAppUrl)}`
+  );
+  Logger.log('Webhook reset: ' + res.getContentText());
 }
