@@ -58,7 +58,7 @@ function generateDashboardHTML(analyses) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TC Acoustic — SG Store Intelligence</title>
+<title>TC Store Visit App — SG</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif; background:#F5F5F7; color:#1D1D1F; }
@@ -128,7 +128,7 @@ body { font-family: -apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif; b
 <body>
 <div class="nav">
   <div>
-    <div class="nav-title">TC Acoustic — SG Store Intelligence</div>
+    <div class="nav-title">TC Store Visit App — SG</div>
     <div class="nav-sub"><span class="live-dot"></span>Live · Q${quarter} W${week} · Updated ${dateStr}</div>
   </div>
   <span class="nav-badge">${atRisk} at risk</span>
