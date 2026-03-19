@@ -22,7 +22,7 @@ function doPost(e) {
     const cache = CacheService.getScriptCache();
     const key = 'upd_' + update.update_id;
     if (cache.get(key)) return ContentService.createTextOutput('OK');
-    cache.put(key, '1', 60);
+    cache.put(key, '1', 600); // 10 min window covers all Telegram retry intervals
 
     // Ignore stale messages (queued overnight replays)
     const msgDate = update.message
@@ -174,14 +174,22 @@ function handleFreeText(chatId, userId, firstName, text) {
   }
 
   if (session.step === 'awaiting_notes') {
-    // Got the visit notes — process them
+    // Got the visit notes — kick off async processing
     session.notes = text;
     session.cm_name = firstName;
     session.user_id = userId;
     clearSession(chatId);
 
     sendMessage(chatId, `🔍 Analysing your visit notes...`);
-    processVisitNote(chatId, session);
+
+    // Store work in Properties so the async trigger can pick it up.
+    // processVisitNote (Claude API + Sheets write) can exceed the 30-second
+    // doPost execution limit, so we run it in a separate triggered execution.
+    PropertiesService.getScriptProperties().setProperty(
+      'async_visit_' + chatId,
+      JSON.stringify({ chatId: chatId, session: session })
+    );
+    ScriptApp.newTrigger('processAsyncVisit').timeBased().after(1000).create();
     return;
   }
 }
@@ -289,6 +297,32 @@ function processVisitNote(chatId, session) {
   }
 }
 
+// ── Async visit processor (runs as a one-time trigger, not inside doPost) ─────
+// This avoids the 30-second web-app execution limit that kills synchronous
+// Claude API + Sheets operations before the confirmation can be sent.
+function processAsyncVisit() {
+  // Delete all triggers for this function first (avoid accumulation)
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'processAsyncVisit') {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+
+  const props = PropertiesService.getScriptProperties();
+  const allProps = props.getProperties();
+
+  Object.keys(allProps).forEach(key => {
+    if (!key.startsWith('async_visit_')) return;
+    try {
+      const { chatId, session } = JSON.parse(allProps[key]);
+      props.deleteProperty(key);
+      processVisitNote(chatId, session);
+    } catch (err) {
+      Logger.log('processAsyncVisit error for ' + key + ': ' + err.message);
+    }
+  });
+}
+
 // ── Session management (using CacheService) ───────────────────────────────────
 function setSession(chatId, data) {
   CacheService.getScriptCache().put(
@@ -315,15 +349,26 @@ function cancelSession(chatId) {
 function sendMessage(chatId, text) {
   const token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN');
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  UrlFetchApp.fetch(url, {
+
+  // Try with Markdown first; fall back to plain text if Telegram rejects the
+  // formatting (AI-generated content can contain unescaped * or _ characters
+  // that cause a 400 and silently swallow the message).
+  let resp = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
-    payload: JSON.stringify({
-      chat_id: chatId,
-      text: text,
-      parse_mode: 'Markdown'
-    })
+    payload: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'Markdown' }),
+    muteHttpExceptions: true
   });
+
+  if (resp.getResponseCode() !== 200) {
+    Logger.log('sendMessage Markdown failed (' + resp.getResponseCode() + '), retrying plain: ' + resp.getContentText());
+    UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ chat_id: chatId, text: text }),
+      muteHttpExceptions: true
+    });
+  }
 }
 
 function sendMessageWithButtons(chatId, text, buttons) {
