@@ -17,6 +17,13 @@
 function doPost(e) {
   try {
     const update = JSON.parse(e.postData.contents);
+
+    // Deduplicate — Telegram retries if we don't respond fast enough
+    const cache = CacheService.getScriptCache();
+    const key = 'upd_' + update.update_id;
+    if (cache.get(key)) return ContentService.createTextOutput('OK');
+    cache.put(key, '1', 60);
+
     handleUpdate(update);
   } catch (err) {
     Logger.log('doPost error: ' + err.message);
@@ -60,7 +67,7 @@ function handleUpdate(update) {
 function handleStart(chatId, firstName) {
   const name = firstName || 'there';
   const msg =
-    `👋 Hi ${name}! Welcome to TC Acoustic Store Intelligence.\n\n` +
+    `👋 Hi ${name}! Welcome to TC Store Visit App.\n\n` +
     `I help you log store visits quickly so your team always has fresh insights.\n\n` +
     `*Commands:*\n` +
     `/visit — Log a store visit (takes ~2 min)\n` +

@@ -65,13 +65,13 @@ function weeklyDigest() {
 // ── Send weekly email ─────────────────────────────────────────────────────────
 function sendWeeklyEmail(email, analyses, atRisk, stale, brightSpots, narrative) {
   const week = getISOWeek(new Date());
-  const subject = `TC Acoustic SG — Weekly Store Intelligence W${week}`;
+  const subject = `TC Store Visit App — Weekly Digest W${week}`;
 
   let body = `<div style="font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;color:#1D1D1F;">`;
 
   // Header
   body += `<div style="background:#1D1D1F;padding:20px 24px;border-radius:12px 12px 0 0;">
-    <h2 style="color:white;margin:0;font-size:18px;font-weight:600;">TC Acoustic SG — Store Intelligence</h2>
+    <h2 style="color:white;margin:0;font-size:18px;font-weight:600;">TC Store Visit App — SG</h2>
     <p style="color:#6E6E73;margin:4px 0 0;font-size:12px;">Week ${week} · ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</p>
   </div>`;
 
@@ -153,7 +153,7 @@ function sendWeeklyEmail(email, analyses, atRisk, stale, brightSpots, narrative)
 // ── Send weekly Telegram summary to AM ────────────────────────────────────────
 function sendWeeklyTelegram(chatId, analyses, atRisk, stale, narrative) {
   const week = getISOWeek(new Date());
-  let msg = `📊 *Week ${week} Store Intelligence — SG*\n\n`;
+  let msg = `📊 *Week ${week} TC Store Visit App — SG*\n\n`;
 
   if (atRisk.length > 0) {
     msg += `🔴 *At risk (${atRisk.length}):*\n`;
