@@ -97,6 +97,15 @@ function handleHelp(chatId) {
 
 // ── /visit — start a guided visit log session ─────────────────────────────────
 function handleVisitPrompt(chatId) {
+  // Don't restart if CM is already writing notes
+  const existing = getSession(chatId);
+  if (existing && existing.step === 'awaiting_notes') {
+    sendMessage(chatId,
+      `📝 You're already logging *${existing.store}*.\n\nJust send your visit notes now, or type /cancel to start over.`
+    );
+    return;
+  }
+
   // Get store list for this CM
   const stores = getStoreListForChat(chatId);
   if (!stores || stores.length === 0) {
