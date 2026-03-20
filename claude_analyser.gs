@@ -67,7 +67,11 @@ function analyseVisitNote(storeName, notes, cmName, country) {
     const data = JSON.parse(response.getContentText());
 
     if (data.error) {
-      Logger.log('Claude API error: ' + JSON.stringify(data.error));
+      Logger.log('Claude API error (HTTP ' + response.getResponseCode() + '): ' + JSON.stringify(data.error));
+      return null;
+    }
+    if (!data.content || !data.content[0]) {
+      Logger.log('Claude API unexpected response: ' + response.getContentText().substring(0, 500));
       return null;
     }
 

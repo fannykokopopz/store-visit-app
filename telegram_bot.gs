@@ -270,7 +270,36 @@ function processVisitNote(chatId, session) {
     const analysis = analyseVisitNote(session.store, session.notes, session.cm_name, 'SG');
 
     if (!analysis) {
-      sendMessage(chatId, `⚠️ Analysis failed. Your note has been saved — we'll retry shortly.`);
+      // Analysis failed — still save the raw notes so the visit isn't lost
+      const timestamp = new Date().toISOString();
+      writeVisitToSheet({
+        timestamp: timestamp,
+        cm_name: session.cm_name,
+        user_id: session.user_id,
+        country: 'SG',
+        store_name: session.store,
+        raw_notes: session.notes,
+        overall_health: 'watch',
+        stock_status: 'amber',
+        stock_summary: '(analysis unavailable)',
+        stock_skus_at_risk: [],
+        momentum: 'flat',
+        momentum_summary: '(analysis unavailable)',
+        competitor_level: 'none',
+        competitor_threats: [],
+        training_urgency: 'none',
+        training_gaps: [],
+        follow_ups: [],
+        key_insight: '(analysis unavailable — check logs)',
+        recommended_action: '(analysis unavailable)',
+        staff_relationship: 'warm',
+        visit_quality: 'standard'
+      });
+      sendMessage(chatId,
+        `📝 *Visit notes saved — ${session.store}*\n\n` +
+        `⚠️ AI analysis failed (check Apps Script logs for the error).\n` +
+        `Your raw notes are in the sheet. Contact your admin to reprocess.`
+      );
       return;
     }
 
