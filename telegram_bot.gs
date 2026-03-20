@@ -198,7 +198,6 @@ function handleFreeText(chatId, userId, firstName, text) {
   }
 
   if (session.step === 'awaiting_notes') {
-    // Got the visit notes — kick off async processing
     session.notes = text;
     session.cm_name = firstName;
     session.user_id = userId;
@@ -206,14 +205,10 @@ function handleFreeText(chatId, userId, firstName, text) {
 
     sendMessage(chatId, `🔍 Analysing your visit notes...`);
 
-    // Store work in Properties so the async trigger can pick it up.
-    // processVisitNote (Claude API + Sheets write) can exceed the 30-second
-    // doPost execution limit, so we run it in a separate triggered execution.
-    PropertiesService.getScriptProperties().setProperty(
-      'async_visit_' + chatId,
-      JSON.stringify({ chatId: chatId, session: session })
-    );
-    ScriptApp.newTrigger('processAsyncVisit').timeBased().after(1000).create();
+    // Process synchronously — Claude Haiku responds in ~3s, well within
+    // the 30-second doPost limit. Async triggers require script.scriptapp
+    // OAuth scope which is unreliable in web app deployments.
+    processVisitNote(chatId, session);
     return;
   }
 }
@@ -351,32 +346,6 @@ function processVisitNote(chatId, session) {
     Logger.log('processVisitNote error: ' + err.message);
     sendMessage(chatId, `⚠️ Something went wrong processing your note. Please try again or contact your manager.`);
   }
-}
-
-// ── Async visit processor (runs as a one-time trigger, not inside doPost) ─────
-// This avoids the 30-second web-app execution limit that kills synchronous
-// Claude API + Sheets operations before the confirmation can be sent.
-function processAsyncVisit() {
-  // Delete all triggers for this function first (avoid accumulation)
-  ScriptApp.getProjectTriggers().forEach(t => {
-    if (t.getHandlerFunction() === 'processAsyncVisit') {
-      ScriptApp.deleteTrigger(t);
-    }
-  });
-
-  const props = PropertiesService.getScriptProperties();
-  const allProps = props.getProperties();
-
-  Object.keys(allProps).forEach(key => {
-    if (!key.startsWith('async_visit_')) return;
-    try {
-      const { chatId, session } = JSON.parse(allProps[key]);
-      props.deleteProperty(key);
-      processVisitNote(chatId, session);
-    } catch (err) {
-      Logger.log('processAsyncVisit error for ' + key + ': ' + err.message);
-    }
-  });
 }
 
 // ── Session management (using CacheService) ───────────────────────────────────
