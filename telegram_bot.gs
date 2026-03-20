@@ -15,28 +15,30 @@
 
 // ── Entry point — Telegram sends every message here ──────────────────────────
 function doPost(e) {
-  // Serialize ALL executions with a global lock so concurrent Telegram retries
-  // can never race past the deduplication check and process the same update twice.
-  const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(10000); // wait up to 10 s; any retry that can't get the lock is dropped
-  } catch (lockErr) {
-    // A concurrent execution is still running — this must be a retry. Drop it.
-    Logger.log('doPost: could not acquire lock, dropping retry');
-    return ContentService.createTextOutput('OK');
-  }
-
   try {
     const update = JSON.parse(e.postData.contents);
 
-    // Deduplicate — Telegram retries if it doesn't get a timely 200 OK.
+    // Deduplicate — Telegram retries if we don't respond fast enough.
+    // Use a short-duration lock (only around the cache check+write) so two
+    // simultaneous doPost executions can't both see a cache miss for the same
+    // update_id. We do NOT hold the lock during handleUpdate — that would block
+    // the async processAsyncVisit trigger (Claude API call) from running.
     const cache = CacheService.getScriptCache();
-    const key = 'upd_' + update.update_id;
-    if (cache.get(key)) {
-      Logger.log('Duplicate update_id ' + update.update_id + ' — skipping');
+    const dedupKey = 'upd_' + update.update_id;
+    const lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(5000);
+      if (cache.get(dedupKey)) {
+        Logger.log('Duplicate update_id ' + update.update_id + ' — skipping');
+        return ContentService.createTextOutput('OK');
+      }
+      cache.put(dedupKey, '1', 600); // 10-min window covers all Telegram retry intervals
+    } catch (lockErr) {
+      Logger.log('Lock timeout for update ' + update.update_id + ' — dropping retry');
       return ContentService.createTextOutput('OK');
+    } finally {
+      try { lock.releaseLock(); } catch (_) {}
     }
-    cache.put(key, '1', 600); // 10-min window covers all Telegram retry intervals
 
     // Ignore stale messages (queued overnight replays)
     const msgDate = update.message
@@ -53,8 +55,6 @@ function doPost(e) {
     handleUpdate(update);
   } catch (err) {
     Logger.log('doPost error: ' + err.message + '\n' + err.stack);
-  } finally {
-    lock.releaseLock();
   }
   return ContentService.createTextOutput('OK');
 }
