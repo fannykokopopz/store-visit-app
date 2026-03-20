@@ -38,7 +38,7 @@ function doPost(e) {
 
     handleUpdate(update);
   } catch (err) {
-    Logger.log('doPost error: ' + err.message);
+    Logger.log('doPost error: ' + err.message + '\n' + err.stack);
   }
   return ContentService.createTextOutput('OK');
 }
@@ -374,7 +374,9 @@ function sendMessage(chatId, text) {
 function sendMessageWithButtons(chatId, text, buttons) {
   const token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN');
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  UrlFetchApp.fetch(url, {
+
+  // Try with inline keyboard + Markdown
+  let resp = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
     payload: JSON.stringify({
@@ -382,8 +384,20 @@ function sendMessageWithButtons(chatId, text, buttons) {
       text: text,
       parse_mode: 'Markdown',
       reply_markup: { inline_keyboard: buttons }
-    })
+    }),
+    muteHttpExceptions: true
   });
+
+  if (resp.getResponseCode() !== 200) {
+    Logger.log('sendMessageWithButtons failed (' + resp.getResponseCode() + '): ' + resp.getContentText());
+    // Fall back: plain text with no keyboard (still useful)
+    UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ chat_id: chatId, text: text }),
+      muteHttpExceptions: true
+    });
+  }
 }
 
 function answerCallbackQuery(callbackQueryId) {
