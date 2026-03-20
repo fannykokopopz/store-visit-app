@@ -65,27 +65,36 @@ function handleUpdate(update) {
     const userId = msg.from.id;
     const text = (msg.text || '').trim();
 
-    // Route commands
-    if (text === '/start') {
-      handleStart(chatId, msg.from.first_name);
-    } else if (text === '/visit') {
-      handleVisitPrompt(chatId);
-    } else if (text === '/mystores') {
-      handleMyStores(chatId, userId);
-    } else if (text === '/help') {
-      handleHelp(chatId);
-    } else if (text.startsWith('/cancel')) {
-      cancelSession(chatId);
-      sendMessage(chatId, '✅ Cancelled. Type /visit to start a new visit log.');
-    } else {
-      // Treat as visit note input — check if in a session
-      handleFreeText(chatId, userId, msg.from.first_name, text);
+    try {
+      // Route commands
+      if (text === '/start') {
+        handleStart(chatId, msg.from.first_name);
+      } else if (text === '/visit') {
+        handleVisitPrompt(chatId);
+      } else if (text === '/mystores') {
+        handleMyStores(chatId, userId);
+      } else if (text === '/help') {
+        handleHelp(chatId);
+      } else if (text.startsWith('/cancel')) {
+        cancelSession(chatId);
+        sendMessage(chatId, '✅ Cancelled. Type /visit to start a new visit log.');
+      } else {
+        // Treat as visit note input — check if in a session
+        handleFreeText(chatId, userId, msg.from.first_name, text);
+      }
+    } catch (err) {
+      Logger.log('handleUpdate error for "' + text + '": ' + err.message + '\n' + err.stack);
+      sendMessage(chatId, '⚠️ Something went wrong. Please try again or type /cancel to reset.');
     }
   }
 
   // Handle callback queries (button presses)
   if (update.callback_query) {
-    handleCallback(update.callback_query);
+    try {
+      handleCallback(update.callback_query);
+    } catch (err) {
+      Logger.log('handleCallback error: ' + err.message + '\n' + err.stack);
+    }
   }
 }
 
@@ -139,9 +148,13 @@ function handleVisitPrompt(chatId) {
   // Set session state — waiting for store selection
   setSession(chatId, { step: 'awaiting_store', stores: stores });
 
-  // Build inline keyboard — show all assigned stores, or cap default at 20
+  // Build inline keyboard — show all assigned stores, or cap default at 20.
+  // callback_data is limited to 64 bytes; "store:" = 6 bytes → 58 bytes for store name.
   const displayStores = assignedStores ? stores : stores.slice(0, 20);
-  const buttons = displayStores.map(s => [{ text: s, callback_data: 'store:' + s }]);
+  const buttons = displayStores.map(s => [{
+    text: s,
+    callback_data: 'store:' + s.substring(0, 58)
+  }]);
   const hint = assignedStores
     ? `📍 *Which store did you visit?*\n\nSelect below or type the store name:`
     : `📍 *Which store did you visit?*\n\nSelect below or type the store name.\n_Tip: Ask your manager to assign your stores for a shorter list._`;
@@ -209,8 +222,11 @@ function handleCallback(cbq) {
   answerCallbackQuery(cbq.id);
 
   if (data.startsWith('store:')) {
-    const storeName = data.replace('store:', '');
+    const storeKey = data.replace('store:', '');
     const session = getSession(chatId) || {};
+    // Resolve full store name from session (callback_data may be truncated to 58 chars)
+    const fullName = (session.stores || []).find(s => s.startsWith(storeKey)) || storeKey;
+    const storeName = fullName;
     session.store = storeName;
     session.step = 'awaiting_notes';
     setSession(chatId, session);
