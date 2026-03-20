@@ -18,11 +18,25 @@ function doPost(e) {
   try {
     const update = JSON.parse(e.postData.contents);
 
-    // Deduplicate — Telegram retries if we don't respond fast enough
+    // Deduplicate — Telegram retries if we don't respond fast enough.
+    // Use a lock to avoid the race condition where two simultaneous executions
+    // both see a cache miss and both process the same update_id.
     const cache = CacheService.getScriptCache();
     const key = 'upd_' + update.update_id;
-    if (cache.get(key)) return ContentService.createTextOutput('OK');
-    cache.put(key, '1', 600); // 10 min window covers all Telegram retry intervals
+    const lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(3000);
+      if (cache.get(key)) {
+        lock.releaseLock();
+        return ContentService.createTextOutput('OK');
+      }
+      cache.put(key, '1', 600); // 10 min window covers all Telegram retry intervals
+    } catch (lockErr) {
+      Logger.log('Lock timeout for update ' + update.update_id + ': ' + lockErr);
+      return ContentService.createTextOutput('OK'); // safe to drop; Telegram will retry
+    } finally {
+      try { lock.releaseLock(); } catch (_) {}
+    }
 
     // Ignore stale messages (queued overnight replays)
     const msgDate = update.message
