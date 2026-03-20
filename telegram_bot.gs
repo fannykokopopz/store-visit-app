@@ -25,6 +25,7 @@ function doPost(e) {
     // the async processAsyncVisit trigger (Claude API call) from running.
     const cache = CacheService.getScriptCache();
     const dedupKey = 'upd_' + update.update_id;
+    Logger.log('doPost: update_id=' + update.update_id);
     const lock = LockService.getScriptLock();
     try {
       lock.waitLock(5000);
@@ -66,6 +67,7 @@ function handleUpdate(update) {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     const text = (msg.text || '').trim();
+    Logger.log('handleUpdate: chatId=' + chatId + ' text="' + text + '"');
 
     try {
       // Route commands
@@ -134,6 +136,7 @@ function handleHelp(chatId) {
 
 // ── /visit — start a guided visit log session ─────────────────────────────────
 function handleVisitPrompt(chatId) {
+  Logger.log('handleVisitPrompt: chatId=' + chatId);
   // Don't restart if CM is already writing notes
   const existing = getSession(chatId);
   if (existing && existing.step === 'awaiting_notes') {
