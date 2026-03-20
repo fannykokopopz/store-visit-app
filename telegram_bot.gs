@@ -132,29 +132,21 @@ function handleVisitPrompt(chatId) {
     return;
   }
 
-  // Get store list for this CM
-  const stores = getStoreListForChat(chatId);
-  if (!stores || stores.length === 0) {
-    sendMessage(chatId,
-      `⚠️ You don't have any stores assigned yet.\n\n` +
-      `Please ask your manager to add you to the system.`
-    );
-    return;
-  }
+  // Get store list for this CM (null = not in CM Roster → use full default list)
+  const assignedStores = getStoreListForChat(chatId);
+  const stores = assignedStores || getDefaultStoreList();
 
   // Set session state — waiting for store selection
   setSession(chatId, { step: 'awaiting_store', stores: stores });
 
-  // Build inline keyboard with store names (max 8 shown)
-  const buttons = stores.slice(0, 8).map(s => [{
-    text: s,
-    callback_data: 'store:' + s
-  }]);
+  // Build inline keyboard — show all assigned stores, or cap default at 20
+  const displayStores = assignedStores ? stores : stores.slice(0, 20);
+  const buttons = displayStores.map(s => [{ text: s, callback_data: 'store:' + s }]);
+  const hint = assignedStores
+    ? `📍 *Which store did you visit?*\n\nSelect below or type the store name:`
+    : `📍 *Which store did you visit?*\n\nSelect below or type the store name.\n_Tip: Ask your manager to assign your stores for a shorter list._`;
 
-  sendMessageWithButtons(chatId,
-    `📍 *Which store did you visit?*\n\nSelect below or type the store name:`,
-    buttons
-  );
+  sendMessageWithButtons(chatId, hint, buttons);
 }
 
 // ── Handle free text input based on session state ─────────────────────────────

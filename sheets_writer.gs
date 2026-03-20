@@ -180,12 +180,13 @@ function getStoreListForChat(chatId) {
     .map(row => row[2])
     .filter(Boolean);
 
-  return stores.length > 0 ? stores : getDefaultStoreList();
+  // Return null when not found so callers can distinguish "assigned" from "fallback"
+  return stores.length > 0 ? stores : null;
 }
 
 // ── Get CM's stores with their current health ─────────────────────────────────
 function getMyStoresSummary(chatId) {
-  const stores = getStoreListForChat(chatId);
+  const stores = getStoreListForChat(chatId) || getDefaultStoreList();
   const allAnalyses = getAllLatestAnalyses();
 
   return stores.map(storeName => {
