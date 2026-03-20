@@ -18,11 +18,25 @@ function doPost(e) {
   try {
     const update = JSON.parse(e.postData.contents);
 
-    // Deduplicate — Telegram retries if we don't respond fast enough
+    // Deduplicate — Telegram retries if we don't respond fast enough.
+    // Use a lock to avoid the race condition where two simultaneous executions
+    // both see a cache miss and both process the same update_id.
     const cache = CacheService.getScriptCache();
     const key = 'upd_' + update.update_id;
-    if (cache.get(key)) return ContentService.createTextOutput('OK');
-    cache.put(key, '1', 600); // 10 min window covers all Telegram retry intervals
+    const lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(3000);
+      if (cache.get(key)) {
+        lock.releaseLock();
+        return ContentService.createTextOutput('OK');
+      }
+      cache.put(key, '1', 600); // 10 min window covers all Telegram retry intervals
+    } catch (lockErr) {
+      Logger.log('Lock timeout for update ' + update.update_id + ': ' + lockErr);
+      return ContentService.createTextOutput('OK'); // safe to drop; Telegram will retry
+    } finally {
+      try { lock.releaseLock(); } catch (_) {}
+    }
 
     // Ignore stale messages (queued overnight replays)
     const msgDate = update.message
@@ -38,7 +52,7 @@ function doPost(e) {
 
     handleUpdate(update);
   } catch (err) {
-    Logger.log('doPost error: ' + err.message);
+    Logger.log('doPost error: ' + err.message + '\n' + err.stack);
   }
   return ContentService.createTextOutput('OK');
 }
@@ -374,7 +388,9 @@ function sendMessage(chatId, text) {
 function sendMessageWithButtons(chatId, text, buttons) {
   const token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN');
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  UrlFetchApp.fetch(url, {
+
+  // Try with inline keyboard + Markdown
+  let resp = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
     payload: JSON.stringify({
@@ -382,8 +398,20 @@ function sendMessageWithButtons(chatId, text, buttons) {
       text: text,
       parse_mode: 'Markdown',
       reply_markup: { inline_keyboard: buttons }
-    })
+    }),
+    muteHttpExceptions: true
   });
+
+  if (resp.getResponseCode() !== 200) {
+    Logger.log('sendMessageWithButtons failed (' + resp.getResponseCode() + '): ' + resp.getContentText());
+    // Fall back: plain text with no keyboard (still useful)
+    UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ chat_id: chatId, text: text }),
+      muteHttpExceptions: true
+    });
+  }
 }
 
 function answerCallbackQuery(callbackQueryId) {
