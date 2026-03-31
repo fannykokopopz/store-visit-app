@@ -147,8 +147,11 @@ function handleVisitPrompt(chatId) {
   }
 
   // Get store list for this CM (null = not in CM Roster → use full default list)
+  Logger.log('handleVisitPrompt: calling getStoreListForChat');
   const assignedStores = getStoreListForChat(chatId);
+  Logger.log('handleVisitPrompt: assignedStores=' + JSON.stringify(assignedStores));
   const stores = assignedStores || getDefaultStoreList();
+  Logger.log('handleVisitPrompt: stores.length=' + stores.length);
 
   // Set session state — waiting for store selection
   setSession(chatId, { step: 'awaiting_store', stores: stores });
@@ -160,11 +163,13 @@ function handleVisitPrompt(chatId) {
     text: s,
     callback_data: 'store:' + s.substring(0, 58)
   }]);
+  Logger.log('handleVisitPrompt: buttons.length=' + buttons.length + ', calling sendMessageWithButtons');
   const hint = assignedStores
-    ? `📍 *Which store did you visit?*\n\nSelect below or type the store name:`
-    : `📍 *Which store did you visit?*\n\nSelect below or type the store name.\n_Tip: Ask your manager to assign your stores for a shorter list._`;
+    ? `📍 Which store did you visit?\n\nSelect below or type the store name:`
+    : `📍 Which store did you visit?\n\nSelect below or type the store name.`;
 
   sendMessageWithButtons(chatId, hint, buttons);
+  Logger.log('handleVisitPrompt: done');
 }
 
 // ── Handle free text input based on session state ─────────────────────────────
@@ -400,28 +405,30 @@ function sendMessageWithButtons(chatId, text, buttons) {
   const token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN');
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
 
-  // Try with inline keyboard + Markdown
+  Logger.log('sendMessageWithButtons: chatId=' + chatId + ' buttons=' + buttons.length);
+
   let resp = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
     payload: JSON.stringify({
       chat_id: chatId,
       text: text,
-      parse_mode: 'Markdown',
       reply_markup: { inline_keyboard: buttons }
     }),
     muteHttpExceptions: true
   });
 
+  Logger.log('sendMessageWithButtons response: ' + resp.getResponseCode() + ' ' + resp.getContentText().substring(0, 300));
+
   if (resp.getResponseCode() !== 200) {
-    Logger.log('sendMessageWithButtons failed (' + resp.getResponseCode() + '): ' + resp.getContentText());
-    // Fall back: plain text with no keyboard (still useful)
-    UrlFetchApp.fetch(url, {
+    Logger.log('sendMessageWithButtons failed, retrying plain text...');
+    let resp2 = UrlFetchApp.fetch(url, {
       method: 'post',
       contentType: 'application/json',
       payload: JSON.stringify({ chat_id: chatId, text: text }),
       muteHttpExceptions: true
     });
+    Logger.log('sendMessageWithButtons fallback: ' + resp2.getResponseCode() + ' ' + resp2.getContentText().substring(0, 300));
   }
 }
 
