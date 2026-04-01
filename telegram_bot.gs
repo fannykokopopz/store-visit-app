@@ -13,6 +13,22 @@
 // AM_EMAIL_SG          — AM email for SG digest
 // ALERT_TELEGRAM_ID    — Telegram chat ID of AM (for at-risk alerts)
 
+// ── Debug log (persists across executions so you can read it after a Telegram run) ──
+function dbg(msg) {
+  const props = PropertiesService.getScriptProperties();
+  const existing = props.getProperty('DEBUG_LOG') || '';
+  const line = new Date().toISOString() + ' ' + msg;
+  props.setProperty('DEBUG_LOG', (existing + '\n' + line).slice(-4000));
+  Logger.log(msg);
+}
+function readDebugLog() {
+  Logger.log(PropertiesService.getScriptProperties().getProperty('DEBUG_LOG') || '(empty)');
+}
+function clearDebugLog() {
+  PropertiesService.getScriptProperties().deleteProperty('DEBUG_LOG');
+  Logger.log('cleared');
+}
+
 // ── Entry point — Telegram sends every message here ──────────────────────────
 function doPost(e) {
   try {
@@ -146,30 +162,26 @@ function handleVisitPrompt(chatId) {
     return;
   }
 
-  // Get store list for this CM (null = not in CM Roster → use full default list)
-  Logger.log('handleVisitPrompt: calling getStoreListForChat');
+  dbg('handleVisitPrompt: calling getStoreListForChat');
   const assignedStores = getStoreListForChat(chatId);
-  Logger.log('handleVisitPrompt: assignedStores=' + JSON.stringify(assignedStores));
+  dbg('handleVisitPrompt: assignedStores=' + JSON.stringify(assignedStores));
   const stores = assignedStores || getDefaultStoreList();
-  Logger.log('handleVisitPrompt: stores.length=' + stores.length);
+  dbg('handleVisitPrompt: stores.length=' + stores.length);
 
-  // Set session state — waiting for store selection
   setSession(chatId, { step: 'awaiting_store', stores: stores });
 
-  // Build inline keyboard — show all assigned stores, or cap default at 20.
-  // callback_data is limited to 64 bytes; "store:" = 6 bytes → 58 bytes for store name.
   const displayStores = assignedStores ? stores : stores.slice(0, 20);
   const buttons = displayStores.map(s => [{
     text: s,
     callback_data: 'store:' + s.substring(0, 58)
   }]);
-  Logger.log('handleVisitPrompt: buttons.length=' + buttons.length + ', calling sendMessageWithButtons');
+  dbg('handleVisitPrompt: buttons.length=' + buttons.length + ', calling sendMessageWithButtons');
   const hint = assignedStores
     ? `📍 Which store did you visit?\n\nSelect below or type the store name:`
     : `📍 Which store did you visit?\n\nSelect below or type the store name.`;
 
   sendMessageWithButtons(chatId, hint, buttons);
-  Logger.log('handleVisitPrompt: done');
+  dbg('handleVisitPrompt: done');
 }
 
 // ── Handle free text input based on session state ─────────────────────────────
@@ -405,7 +417,7 @@ function sendMessageWithButtons(chatId, text, buttons) {
   const token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN');
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
 
-  Logger.log('sendMessageWithButtons: chatId=' + chatId + ' buttons=' + buttons.length);
+  dbg('sendMessageWithButtons: chatId=' + chatId + ' buttons=' + buttons.length);
 
   let resp = UrlFetchApp.fetch(url, {
     method: 'post',
@@ -418,17 +430,17 @@ function sendMessageWithButtons(chatId, text, buttons) {
     muteHttpExceptions: true
   });
 
-  Logger.log('sendMessageWithButtons response: ' + resp.getResponseCode() + ' ' + resp.getContentText().substring(0, 300));
+  dbg('sendMessageWithButtons response: ' + resp.getResponseCode() + ' ' + resp.getContentText().substring(0, 300));
 
   if (resp.getResponseCode() !== 200) {
-    Logger.log('sendMessageWithButtons failed, retrying plain text...');
+    dbg('sendMessageWithButtons failed, retrying plain text...');
     let resp2 = UrlFetchApp.fetch(url, {
       method: 'post',
       contentType: 'application/json',
       payload: JSON.stringify({ chat_id: chatId, text: text }),
       muteHttpExceptions: true
     });
-    Logger.log('sendMessageWithButtons fallback: ' + resp2.getResponseCode() + ' ' + resp2.getContentText().substring(0, 300));
+    dbg('sendMessageWithButtons fallback: ' + resp2.getResponseCode() + ' ' + resp2.getContentText().substring(0, 300));
   }
 }
 
