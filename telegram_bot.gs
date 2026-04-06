@@ -14,7 +14,30 @@
 // ALERT_TELEGRAM_ID    — Telegram chat ID of AM (for at-risk alerts)
 
 // ── Entry point — Telegram sends every message here ──────────────────────────
+function verifyTelegramRequest(e) {
+  const secret = PropertiesService.getScriptProperties().getProperty('TELEGRAM_WEBHOOK_SECRET');
+  // If no secret is configured, skip verification (backwards-compatible during initial setup).
+  if (!secret) return true;
+  // Apps Script web apps do not expose HTTP headers in the event object, so we
+  // cannot use Telegram's X-Telegram-Bot-Api-Secret-Token header approach.
+  // Instead, we embed the secret as a query parameter in the webhook URL and
+  // verify it here via e.parameter.secret.
+  return e.parameter.secret === secret;
+}
+
+// doGet is required for Google Apps Script to fully register the web app and
+// prevent POST requests from being 302-redirected by Google's infrastructure.
+function doGet() {
+  return ContentService.createTextOutput('OK');
+}
+
 function doPost(e) {
+  // Reject requests that don't carry the correct webhook secret.
+  if (!verifyTelegramRequest(e)) {
+    Logger.log('doPost: rejected — missing or invalid X-Telegram-Bot-Api-Secret-Token');
+    return ContentService.createTextOutput('Unauthorized');
+  }
+
   try {
     const update = JSON.parse(e.postData.contents);
 
@@ -41,15 +64,16 @@ function doPost(e) {
       try { lock.releaseLock(); } catch (_) {}
     }
 
-    // Ignore stale messages (queued overnight replays)
-    const msgDate = update.message
-      ? update.message.date
-      : update.callback_query
-        ? update.callback_query.message.date
-        : null;
+    // Ignore stale messages (queued overnight replays).
+    // For callback_queries, use message.date only as a last resort — the user
+    // may legitimately press a store button several minutes after the keyboard
+    // was sent. Callbacks have no native timestamp, so we only drop plain
+    // messages here; callbacks are never considered stale.
     const nowSec = Math.floor(Date.now() / 1000);
-    if (msgDate && (nowSec - msgDate) > 300) {
-      Logger.log('Dropped stale update ' + update.update_id + ' (' + (nowSec - msgDate) + 's old)');
+    if (update.message && update.message.date && (nowSec - update.message.date) > 300) {
+      Logger.log('Dropped stale message update ' + update.update_id + ' (' + (nowSec - update.message.date) + 's old)');
+      // Acknowledge any pending callback_query to clear the spinner, then bail.
+      if (update.callback_query) answerCallbackQueryById(update.callback_query.id);
       return ContentService.createTextOutput('OK');
     }
 
@@ -426,12 +450,61 @@ function sendMessageWithButtons(chatId, text, buttons) {
 }
 
 function answerCallbackQuery(callbackQueryId) {
+  answerCallbackQueryById(callbackQueryId);
+}
+
+function answerCallbackQueryById(callbackQueryId) {
   const token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN');
   UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
     method: 'post',
     contentType: 'application/json',
-    payload: JSON.stringify({ callback_query_id: callbackQueryId })
+    payload: JSON.stringify({ callback_query_id: callbackQueryId }),
+    muteHttpExceptions: true
   });
+}
+
+// ── Diagnostic: simulate a Telegram /start message — run from the editor ─────
+// If you receive a /start reply in Telegram, the bot code works and the
+// problem is purely the 302 redirect (Telegram can't reach doPost).
+function testDoPost() {
+  const YOUR_CHAT_ID = PropertiesService.getScriptProperties().getProperty('ALERT_TELEGRAM_ID');
+  doPost({
+    postData: {
+      contents: JSON.stringify({
+        update_id: 99999998,
+        message: {
+          message_id: 1,
+          from: { id: Number(YOUR_CHAT_ID), first_name: 'Test', is_bot: false },
+          chat: { id: Number(YOUR_CHAT_ID), type: 'private' },
+          date: Math.floor(Date.now() / 1000),
+          text: '/start'
+        }
+      })
+    },
+    parameter: {}
+  });
+}
+
+// ── Diagnostic: find where the 302 redirect points ───────────────────────────
+function findRedirectUrl() {
+  const webAppUrl = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL');
+  const res = UrlFetchApp.fetch(webAppUrl, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: '{"test":true}',
+    followRedirects: false,
+    muteHttpExceptions: true
+  });
+  Logger.log('Status: ' + res.getResponseCode());
+  Logger.log('Location header: ' + res.getAllHeaders()['Location']);
+}
+
+// ── Diagnostic: check what Telegram sees for this webhook ────────────────────
+// Run manually from the editor and check the execution log
+function checkWebhookInfo() {
+  const token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN');
+  const res = UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`);
+  Logger.log(res.getContentText());
 }
 
 // ── Register webhook with Telegram ───────────────────────────────────────────
@@ -440,9 +513,19 @@ function registerWebhook() {
   const props = PropertiesService.getScriptProperties().getProperties();
   const token = props.TELEGRAM_TOKEN;
   const webAppUrl = props.WEB_APP_URL; // Set this to your deployed Apps Script URL
+  const secret = props.TELEGRAM_WEBHOOK_SECRET;
+
+  // GAS web apps don't expose HTTP headers, so we pass the secret as a query
+  // parameter in the webhook URL rather than using Telegram's secret_token field.
+  const url = secret ? webAppUrl + '?secret=' + encodeURIComponent(secret) : webAppUrl;
 
   const response = UrlFetchApp.fetch(
-    `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webAppUrl)}`
+    `https://api.telegram.org/bot${token}/setWebhook`,
+    {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ url: url })
+    }
   );
   Logger.log(response.getContentText());
 }
@@ -459,9 +542,17 @@ function resetWebhook() {
     `https://api.telegram.org/bot${token}/deleteWebhook?drop_pending_updates=true`
   );
 
-  // Re-register
+  // Re-register with secret embedded in URL
+  const secret = props.TELEGRAM_WEBHOOK_SECRET;
+  const url = secret ? webAppUrl + '?secret=' + encodeURIComponent(secret) : webAppUrl;
+
   const res = UrlFetchApp.fetch(
-    `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webAppUrl)}`
+    `https://api.telegram.org/bot${token}/setWebhook`,
+    {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ url: url })
+    }
   );
   Logger.log('Webhook reset: ' + res.getContentText());
 }

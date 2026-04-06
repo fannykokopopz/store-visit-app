@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TC Store Visit App — SG</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif; background:#F5F5F7; color:#1D1D1F; }
+.nav { background:rgba(255,255,255,0.92); backdrop-filter:blur(20px); border-bottom:0.5px solid #D2D2D7; padding:0 24px; height:52px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+.nav-title { font-size:17px; font-weight:600; letter-spacing:-0.3px; }
+.nav-sub { font-size:11px; color:#6E6E73; margin-top:1px; }
+.main { max-width:1200px; margin:0 auto; padding:20px; }
+.stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
+.stat { background:white; border-radius:12px; border:0.5px solid #D2D2D7; padding:14px 16px; }
+.stat-n { font-size:28px; font-weight:600; letter-spacing:-1px; color:#C7C7CC; }
+.stat-l { font-size:11px; color:#6E6E73; margin-top:2px; }
+.empty { text-align:center; padding:80px 20px; }
+.empty-icon { font-size:48px; margin-bottom:16px; }
+.empty-title { font-size:17px; font-weight:600; color:#1D1D1F; margin-bottom:8px; }
+.empty-sub { font-size:14px; color:#6E6E73; line-height:1.6; max-width:360px; margin:0 auto; }
+.badge { display:inline-block; font-size:11px; font-weight:600; background:#F5F5F7; border:0.5px solid #D2D2D7; color:#6E6E73; padding:3px 10px; border-radius:10px; margin-top:16px; }
+@media(max-width:600px){ .stats { grid-template-columns:repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<div class="nav">
+  <div>
+    <div class="nav-title">TC Store Visit App — SG</div>
+    <div class="nav-sub">Store Intelligence Dashboard</div>
+  </div>
+</div>
+<div class="main">
+  <div class="stats">
+    <div class="stat"><div class="stat-n">—</div><div class="stat-l">At risk</div></div>
+    <div class="stat"><div class="stat-n">—</div><div class="stat-l">Watch</div></div>
+    <div class="stat"><div class="stat-n">—</div><div class="stat-l">Healthy</div></div>
+    <div class="stat"><div class="stat-n">—</div><div class="stat-l">Not visited 7d+</div></div>
+  </div>
+  <div class="empty">
+    <div class="empty-icon">📋</div>
+    <div class="empty-title">No visit data yet</div>
+    <div class="empty-sub">Dashboard updates automatically after the first store visit is logged via the Telegram bot.</div>
+    <div class="badge">Waiting for first visit</div>
+  </div>
+</div>
+</body>
+</html>

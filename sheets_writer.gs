@@ -158,7 +158,9 @@ function getAllLatestAnalyses() {
     });
     // Calculate days since last visit
     if (obj.last_visit) {
-      const lastDate = new Date(obj.last_visit.split('/').reverse().join('-'));
+      const lastDate = obj.last_visit instanceof Date
+        ? obj.last_visit
+        : new Date(obj.last_visit.split('/').reverse().join('-'));
       obj.days_ago = Math.floor((new Date() - lastDate) / (1000 * 60 * 60 * 24));
     }
     return obj;
@@ -171,7 +173,9 @@ function getStoreListForChat(chatId) {
     PropertiesService.getScriptProperties().getProperty('SHEET_ID')
   );
   const sheet = ss.getSheetByName(SHEETS.CM_ROSTER);
-  if (!sheet || sheet.getLastRow() < 2) return getDefaultStoreList();
+  // Return null (not the default list) when the roster sheet doesn't exist yet,
+  // so callers can correctly distinguish "no assignment" from "assigned stores".
+  if (!sheet || sheet.getLastRow() < 2) return null;
 
   const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
   // Columns: Telegram Chat ID | CM Name | Store Name

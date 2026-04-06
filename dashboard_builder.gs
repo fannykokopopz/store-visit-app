@@ -6,8 +6,11 @@
 
 // ── Trigger dashboard rebuild (called after each visit + weekly cron) ─────────
 function triggerDashboardRebuild() {
-  // Run async to not block the Telegram response
-  // In Apps Script, we use a time-based trigger with a short delay
+  // Guard against trigger accumulation: Apps Script allows only 20 triggers
+  // per project. Delete any existing pending rebuild triggers before adding
+  // a new one so we never hit the limit.
+  cleanupTriggers('buildAndPublishDashboard');
+
   ScriptApp.newTrigger('buildAndPublishDashboard')
     .timeBased()
     .after(30 * 1000) // 30 seconds after visit logged

@@ -36,6 +36,31 @@ Rules:
 - visit_quality: minimal = barely any info; standard = decent notes; thorough = rich detail
 - If a field has no evidence, return [] or "none" — never invent signals`;
 
+// ── Diagnostic: test full visit note analysis ────────────────────────────────
+function testAnalysis() {
+  const result = analyseVisitNote(
+    'Challenger @ ION',
+    'Spoke to Henry. Store quiet, 30% foot traffic. Sold 3 Era 100s last week, Arc Ultra slow (1 unit). Era 300 display dusty. Bose promoter doing demos near our section. Trained Yuan on Arc Ultra Trueplay. Need to follow up on second Era 300 demo unit — current one has a crack.',
+    'Fanny',
+    'SG'
+  );
+  Logger.log(JSON.stringify(result, null, 2));
+}
+
+// ── Diagnostic: test Claude API key and connectivity ─────────────────────────
+function testClaudeApi() {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!apiKey) { Logger.log('ERROR: ANTHROPIC_API_KEY not set'); return; }
+  const response = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 10, messages: [{ role: 'user', content: 'Hi' }] }),
+    muteHttpExceptions: true
+  });
+  Logger.log('Status: ' + response.getResponseCode());
+  Logger.log('Body: ' + response.getContentText().substring(0, 300));
+}
+
 // ── Main analysis function ────────────────────────────────────────────────────
 function analyseVisitNote(storeName, notes, cmName, country) {
   const apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
