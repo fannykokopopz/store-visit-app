@@ -55,9 +55,9 @@ button,input,select{font:inherit;}
 .stat-note{margin-top:6px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.4;color:var(--muted);}
 .controls{display:grid;grid-template-columns:minmax(240px,1.2fr) repeat(4,max-content);gap:10px;align-items:center;background:rgba(255,253,248,0.82);border:1px solid var(--line);border-radius:22px;padding:14px 16px;box-shadow:var(--shadow);margin-bottom:18px;}
 .search-wrap{position:relative;}
-.search-wrap input{width:100%;padding:13px 16px 13px 42px;border-radius:16px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;}
+.search-wrap input{width:100%;padding:13px 16px;border-radius:16px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;}
+.search-wrap input::placeholder{color:#8a8176;font-size:13px;}
 .search-wrap input:focus,.select-wrap select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(31,60,136,0.12);}
-.search-icon{position:absolute;left:16px;top:50%;transform:translateY(-50%);font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;color:var(--muted);}
 .chips{display:flex;gap:8px;flex-wrap:wrap;}
 .chip{padding:10px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:#4f473f;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.03em;cursor:pointer;}
 .chip.active{background:var(--text);border-color:var(--text);color:#fff;}
@@ -179,7 +179,6 @@ button,input,select{font:inherit;}
 
   <div class="controls">
     <div class="search-wrap">
-      <span class="search-icon">Search</span>
       <input type="text" id="srch" placeholder="Search retailer or store" oninput="render()">
     </div>
     <div class="chips">
