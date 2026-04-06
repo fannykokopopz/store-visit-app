@@ -3,46 +3,211 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TC Store Visit App — SG</title>
+<title>TC Store Visit App ? SG</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif; background:#F5F5F7; color:#1D1D1F; }
 .nav { background:rgba(255,255,255,0.92); backdrop-filter:blur(20px); border-bottom:0.5px solid #D2D2D7; padding:0 24px; height:52px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
 .nav-title { font-size:17px; font-weight:600; letter-spacing:-0.3px; }
 .nav-sub { font-size:11px; color:#6E6E73; margin-top:1px; }
+.nav-badge { font-size:11px; font-weight:600; background:#FF3B30; color:white; padding:3px 10px; border-radius:10px; }
 .main { max-width:1200px; margin:0 auto; padding:20px; }
+.sec { font-size:11px; font-weight:600; color:#6E6E73; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; }
 .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
 .stat { background:white; border-radius:12px; border:0.5px solid #D2D2D7; padding:14px 16px; }
-.stat-n { font-size:28px; font-weight:600; letter-spacing:-1px; color:#C7C7CC; }
+.stat-n { font-size:28px; font-weight:600; letter-spacing:-1px; }
 .stat-l { font-size:11px; color:#6E6E73; margin-top:2px; }
-.empty { text-align:center; padding:80px 20px; }
-.empty-icon { font-size:48px; margin-bottom:16px; }
-.empty-title { font-size:17px; font-weight:600; color:#1D1D1F; margin-bottom:8px; }
-.empty-sub { font-size:14px; color:#6E6E73; line-height:1.6; max-width:360px; margin:0 auto; }
-.badge { display:inline-block; font-size:11px; font-weight:600; background:#F5F5F7; border:0.5px solid #D2D2D7; color:#6E6E73; padding:3px 10px; border-radius:10px; margin-top:16px; }
-@media(max-width:600px){ .stats { grid-template-columns:repeat(2,1fr); } }
+.nr{color:#FF3B30;} .no{color:#FF9500;} .ng{color:#34C759;} .ngr{color:#6E6E73;}
+.ctrl { display:flex; gap:7px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
+.sw { flex:1; min-width:160px; position:relative; }
+.sw input { width:100%; padding:7px 11px 7px 28px; border:0.5px solid #D2D2D7; border-radius:10px; font-size:13px; background:white; color:#1D1D1F; font-family:inherit; }
+.sw input:focus { outline:none; border-color:#007AFF; }
+.sic { position:absolute; left:9px; top:50%; transform:translateY(-50%); color:#6E6E73; font-size:12px; pointer-events:none; }
+.chip { font-size:11px; font-weight:500; padding:5px 12px; border-radius:20px; border:0.5px solid #D2D2D7; background:white; color:#6E6E73; cursor:pointer; font-family:inherit; }
+.chip.ca { background:#1D1D1F; border-color:#1D1D1F; color:white; }
+.cm-sel { font-size:12px; padding:5px 9px; border:0.5px solid #D2D2D7; border-radius:10px; background:white; color:#1D1D1F; font-family:inherit; }
+.srt { font-size:11px; padding:5px 9px; border:0.5px solid #D2D2D7; border-radius:10px; background:white; color:#1D1D1F; font-family:inherit; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:10px; }
+.card { background:white; border-radius:14px; border:0.5px solid #D2D2D7; overflow:hidden; cursor:pointer; transition:all .15s; }
+.card:hover { border-color:#007AFF; box-shadow:0 2px 12px rgba(0,122,255,0.1); transform:translateY(-1px); }
+.card.sel { border-color:#007AFF; border-width:1.5px; }
+.ch { padding:12px 14px 7px; display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
+.cn { font-size:12px; font-weight:600; color:#1D1D1F; line-height:1.3; flex:1; }
+.hb { font-size:10px; font-weight:600; padding:2px 8px; border-radius:7px; white-space:nowrap; flex-shrink:0; }
+.hb-strong,.hb-healthy{background:#D1FAE5;color:#065F46;} .hb-watch{background:#FEF3C7;color:#92400E;} .hb-at-risk{background:#FEE2E2;color:#991B1B;}
+.cm2 { padding:0 14px 7px; font-size:11px; color:#6E6E73; }
+.csig { padding:0 14px 8px; display:flex; gap:4px; flex-wrap:wrap; }
+.sig { font-size:10px; font-weight:500; padding:2px 7px; border-radius:6px; }
+.sig-r{background:#FEE2E2;color:#991B1B;} .sig-a{background:#FEF3C7;color:#92400E;} .sig-g{background:#D1FAE5;color:#065F46;} .sig-b{background:#DBEAFE;color:#1E40AF;} .sig-p{background:#EDE9FE;color:#5B21B6;}
+.cd { height:0.5px; background:#F5F5F7; margin:0 14px; }
+.ci { padding:8px 14px 12px; }
+.cil { font-size:10px; font-weight:600; color:#6E6E73; letter-spacing:0.4px; text-transform:uppercase; margin-bottom:2px; }
+.cit { font-size:12px; color:#3C3C43; line-height:1.5; }
+.mu{color:#34C759;font-weight:600;} .mf{color:#FF9500;} .md{color:#FF3B30;font-weight:600;}
+.ovl { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:200; }
+.ovl.open { display:flex; justify-content:flex-end; }
+.dp { background:white; width:460px; max-width:100%; height:100%; overflow-y:auto; display:flex; flex-direction:column; animation:sli .2s ease; }
+@keyframes sli{from{transform:translateX(30px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+.dph { padding:15px 18px 12px; border-bottom:0.5px solid #F2F2F7; position:sticky; top:0; background:white; }
+.dpc { float:right; font-size:24px; line-height:1; color:#6E6E73; cursor:pointer; }
+.dpn { font-size:15px; font-weight:600; color:#1D1D1F; padding-right:28px; line-height:1.3; }
+.dpm { font-size:11px; color:#6E6E73; margin-top:3px; }
+.dpb { padding:14px 18px; flex:1; }
+.dph2 { background:#F5F5F7; border-radius:10px; padding:11px 13px; margin-bottom:10px; }
+.dhl { font-size:10px; font-weight:600; color:#6E6E73; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:2px; }
+.dhv { font-size:13px; color:#1D1D1F; line-height:1.5; }
+.dps { margin-bottom:15px; }
+.dpst { font-size:10px; font-weight:600; color:#6E6E73; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:5px; }
+.dpit { font-size:13px; color:#1D1D1F; padding:5px 0; border-bottom:0.5px solid #F5F5F7; line-height:1.5; }
+.dpit:last-child { border-bottom:none; }
+.dpit.mt { color:#6E6E73; font-style:italic; }
+.dpa { padding:12px 18px; border-top:0.5px solid #F2F2F7; display:flex; flex-direction:column; gap:7px; }
+.dpbtn { font-size:13px; font-weight:500; padding:9px 14px; border-radius:10px; border:0.5px solid #D2D2D7; background:#F5F5F7; color:#1D1D1F; cursor:pointer; font-family:inherit; text-align:left; }
+.dpbtn.pr { background:#1D1D1F; color:white; border-color:#1D1D1F; }
+.empty { text-align:center; padding:60px 20px; color:#6E6E73; font-size:14px; }
+.live-dot { width:7px; height:7px; border-radius:50%; background:#34C759; display:inline-block; margin-right:5px; animation:pulse 2s infinite; }
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+@media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr);}.grid{grid-template-columns:1fr;}.dp{width:100%;}}
 </style>
 </head>
 <body>
 <div class="nav">
   <div>
-    <div class="nav-title">TC Store Visit App — SG</div>
-    <div class="nav-sub">Store Intelligence Dashboard</div>
+    <div class="nav-title">TC Store Visit App ? SG</div>
+    <div class="nav-sub"><span class="live-dot"></span>Live ? Q2 W15 ? Updated 6 Apr 2026</div>
   </div>
+  <span class="nav-badge">0 at risk</span>
 </div>
 <div class="main">
   <div class="stats">
-    <div class="stat"><div class="stat-n">—</div><div class="stat-l">At risk</div></div>
-    <div class="stat"><div class="stat-n">—</div><div class="stat-l">Watch</div></div>
-    <div class="stat"><div class="stat-n">—</div><div class="stat-l">Healthy</div></div>
-    <div class="stat"><div class="stat-n">—</div><div class="stat-l">Not visited 7d+</div></div>
+    <div class="stat"><div class="stat-n nr">0</div><div class="stat-l">At risk</div></div>
+    <div class="stat"><div class="stat-n no">2</div><div class="stat-l">Watch</div></div>
+    <div class="stat"><div class="stat-n ng">0</div><div class="stat-l">Healthy</div></div>
+    <div class="stat"><div class="stat-n ngr">0</div><div class="stat-l">Not visited 7d+</div></div>
   </div>
-  <div class="empty">
-    <div class="empty-icon">📋</div>
-    <div class="empty-title">No visit data yet</div>
-    <div class="empty-sub">Dashboard updates automatically after the first store visit is logged via the Telegram bot.</div>
-    <div class="badge">Waiting for first visit</div>
+  <div class="ctrl">
+    <div class="sw"><span class="sic">?</span><input type="text" id="srch" placeholder="Search store..." oninput="render()"></div>
+    <button class="chip ca" onclick="sf('all',this)">All (2)</button>
+    <button class="chip" onclick="sf('at-risk',this)">? At risk</button>
+    <button class="chip" onclick="sf('watch',this)">? Watch</button>
+    <button class="chip" onclick="sf('healthy',this)">? Healthy</button>
+    <button class="chip" onclick="sf('stale',this)">? 7d+</button>
+    <select class="cm-sel" id="cm-sel" onchange="render()">
+      <option value="">All staff</option>
+      <option value="fanny">fanny</option>
+    </select>
+    <select class="srt" id="srt" onchange="render()">
+      <option value="risk">Risk first</option>
+      <option value="recent">Most recent</option>
+      <option value="stale">Least visited</option>
+      <option value="alpha">A?Z</option>
+    </select>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none">No stores match.</div>
+</div>
+<div class="ovl" id="ovl" onclick="mc(event)">
+  <div class="dp" id="dp">
+    <div class="dph"><span class="dpc" onclick="cdp()">?</span><div class="dpn" id="dpn"></div><div class="dpm" id="dpm"></div></div>
+    <div class="dpb" id="dpb"></div>
+    <div class="dpa" id="dpa"></div>
   </div>
 </div>
+<script>
+const D=[{"store_name":"Challenger @ ION","country":"SG","cm_name":"fanny","last_visit":"2026-06-03T16:00:00.000Z","days_ago":-59,"overall_health":"watch","stock_status":"amber","stock_summary":"(analysis unavailable)","stock_skus_at_risk":[],"momentum":"flat","momentum_summary":"(analysis unavailable)","competitor_level":"none","competitor_threats":[],"training_urgency":"none","training_gaps":[],"key_insight":"(analysis unavailable ? check logs)","recommended_action":"(analysis unavailable)","staff_relationship":"warm","total_visits":2},{"store_name":"Harvey Norman @ Parkway Parade","country":"SG","cm_name":"fanny","last_visit":"2026-06-03T16:00:00.000Z","days_ago":-59,"overall_health":"watch","stock_status":"amber","stock_summary":"Era 300 display unit damaged and requires replacement; Era 100 performing well but Arc Ultra momentum is weak.","stock_skus_at_risk":["Arc Ultra","Era 300"],"momentum":"flat","momentum_summary":"Era 100 sales solid (3 units/week) but Arc Ultra stalled at 1 unit; low foot traffic suggests broader store slowdown.","competitor_level":"high","competitor_threats":["Bose promoter actively demoing in-store near TC Acoustic section","Arc Ultra underperforming against competitor pressure"],"training_urgency":"high","training_gaps":["Yuan unfamiliar with Trueplay feature on Arc Ultra","Insufficient Arc Ultra product knowledge among floor staff"],"key_insight":"Arc Ultra is losing to Bose on-site demos due to staff knowledge gaps?urgent retraining on Trueplay and demo execution required to recapture momentum.","recommended_action":"Conduct hands-on Arc Ultra training (Trueplay focus) with Henry and Yuan within 7 days, and expedite Era 300 demo unit replacement to restore visual presence.","staff_relationship":"warm","total_visits":2}];
+let AF='all',SS=null;
+const HBC={strong:'hb-strong',healthy:'hb-healthy',watch:'hb-watch','at-risk':'hb-at-risk'};
+const HBL={strong:'STRONG',healthy:'HEALTHY',watch:'WATCH','at-risk':'AT RISK'};
+const MC={up:'mu',flat:'mf',down:'md'};
+const MI={up:'?',flat:'?',down:'?'};
+const SP={'at-risk':0,watch:1,healthy:2,strong:3};
+function sigs(r){
+  const s=[];
+  if(r.stock_status==='red')s.push(['? Stock','sig-r']);
+  else if(r.stock_status==='amber')s.push(['? Stock','sig-a']);
+  if(r.competitor_level==='high')s.push(['?? Competitor','sig-p']);
+  else if(r.competitor_level==='low')s.push(['? Competitor','sig-p']);
+  if(r.training_urgency==='high')s.push(['? Training','sig-b']);
+  if(r.momentum==='up')s.push(['? Up','sig-g']);
+  else if(r.momentum==='down')s.push(['? Down','sig-r']);
+  if(r.days_ago>7)s.push(['? '+r.days_ago+'d','sig-a']);
+  return s;
+}
+function filt(){
+  const q=document.getElementById('srch').value.toLowerCase();
+  const cm=document.getElementById('cm-sel').value;
+  const srt=document.getElementById('srt').value;
+  let data=D.filter(r=>{
+    if(q&&!r.store_name.toLowerCase().includes(q))return false;
+    if(cm&&r.cm_name!==cm)return false;
+    if(AF==='all')return true;
+    if(AF==='at-risk')return r.overall_health==='at-risk';
+    if(AF==='watch')return r.overall_health==='watch';
+    if(AF==='healthy')return r.overall_health==='healthy'||r.overall_health==='strong';
+    if(AF==='stale')return r.days_ago>7;
+    return true;
+  });
+  data.sort((a,b)=>{
+    if(srt==='risk'){const d=(SP[a.overall_health]??1)-(SP[b.overall_health]??1);return d!==0?d:a.days_ago-b.days_ago;}
+    if(srt==='recent')return a.days_ago-b.days_ago;
+    if(srt==='stale')return b.days_ago-a.days_ago;
+    return a.store_name.localeCompare(b.store_name);
+  });
+  return data;
+}
+function render(){
+  const data=filt();
+  const grid=document.getElementById('grid');
+  const empty=document.getElementById('empty');
+  if(!data.length){grid.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  grid.innerHTML=data.map(r=>{
+    const sg=sigs(r);
+    const sel=SS===r.store_name?'sel':'';
+    const esc=r.store_name.replace(/'/g,"\'");
+    return '<div class="card '+sel+'" onclick="odp(''+esc+'')">'+
+      '<div class="ch"><span class="cn">'+r.store_name+'</span><span class="hb '+(HBC[r.overall_health]||'hb-watch')+'">'+(HBL[r.overall_health]||'WATCH')+'</span></div>'+
+      '<div class="cm2">'+r.cm_name+' ? '+r.total_visits+'v ? '+(r.days_ago===0?'today':r.days_ago+'d ago')+'</div>'+
+      (sg.length?'<div class="csig">'+sg.map(s=>'<span class="sig '+s[1]+'">'+s[0]+'</span>').join('')+'</div>':'')+
+      '<div class="cd"></div>'+
+      '<div class="ci"><div class="cil">Key insight</div><div class="cit"><span class="'+(MC[r.momentum])+'">'+MI[r.momentum]+'</span> '+r.key_insight+'</div></div>'+
+    '</div>';
+  }).join('');
+}
+function sf(f,el){AF=f;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('ca'));el.classList.add('ca');render();}
+function odp(name){
+  SS=name;
+  const r=D.find(x=>x.store_name===name);if(!r)return;
+  document.getElementById('dpn').textContent=name;
+  document.getElementById('dpm').textContent='CM: '+r.cm_name+' ? '+r.total_visits+' visits ? Last: '+(r.days_ago===0?'today':r.days_ago+'d ago');
+  const mc=MC[r.momentum],mi=MI[r.momentum];
+  document.getElementById('dpb').innerHTML=
+    '<div class="dph2"><div class="dhl">Key insight</div><div class="dhv">'+r.key_insight+'</div></div>'+
+    '<div class="dph2"><div class="dhl">Recommended action</div><div class="dhv"><strong>'+r.recommended_action+'</strong></div></div>'+
+    '<div class="dps"><div class="dpst">Momentum</div><div class="dpit"><span class="'+mc+'">'+mi+' '+r.momentum.toUpperCase()+'</span> ? '+r.momentum_summary+'</div></div>'+
+    '<div class="dps"><div class="dpst">Stock ? '+r.stock_status.toUpperCase()+'</div>'+
+      '<div class="dpit">'+r.stock_summary+'</div>'+
+      (r.stock_skus_at_risk.length?r.stock_skus_at_risk.map(s=>'<div class="dpit" style="color:#FF3B30">? '+s+'</div>').join(''):'<div class="dpit mt">No SKUs flagged</div>')+
+    '</div>'+
+    '<div class="dps"><div class="dpst">Competitors ? '+r.competitor_level.toUpperCase()+'</div>'+
+      (r.competitor_threats.length?r.competitor_threats.map(t=>'<div class="dpit">? '+t+'</div>').join(''):'<div class="dpit mt">None flagged</div>')+
+    '</div>'+
+    '<div class="dps"><div class="dpst">Training ? '+r.training_urgency.toUpperCase()+'</div>'+
+      (r.training_gaps.length?r.training_gaps.map(g=>'<div class="dpit">? '+g+'</div>').join(''):'<div class="dpit mt">None flagged</div>')+
+    '</div>';
+  document.getElementById('dpa').innerHTML=
+    '<button class="dpbtn pr" onclick="cb(''+name.replace(/'/g,"\'")+'')">? Copy pre-call brief</button>';
+  document.getElementById('ovl').classList.add('open');
+  render();
+}
+function cdp(){SS=null;document.getElementById('ovl').classList.remove('open');render();}
+function mc(e){if(e.target===document.getElementById('ovl'))cdp();}
+function cb(name){
+  const r=D.find(x=>x.store_name===name);if(!r)return;
+  const t='PRE-CALL BRIEF ? '+name+'\nCM: '+r.cm_name+' ? Last visit: '+(r.days_ago===0?'today':r.days_ago+'d ago')+'\n\nKEY INSIGHT\n'+r.key_insight+'\n\nACTION\n'+r.recommended_action+'\n\nMOMENTUM: '+MI[r.momentum]+' '+r.momentum.toUpperCase()+'\n'+r.momentum_summary+'\n\nSTOCK: '+r.stock_status.toUpperCase()+'\n'+r.stock_summary+(r.stock_skus_at_risk.length?'\nAt risk: '+r.stock_skus_at_risk.join(', '):'')+'\n\nCOMPETITORS: '+r.competitor_level.toUpperCase()+'\n'+(r.competitor_threats.length?r.competitor_threats.join('\n'):'None')+'\n\nTRAINING: '+r.training_urgency.toUpperCase()+'\n'+(r.training_gaps.length?r.training_gaps.join('\n'):'None');
+  navigator.clipboard.writeText(t).then(()=>{const b=document.querySelector('.dpbtn.pr');const o=b.textContent;b.textContent='? Copied!';setTimeout(()=>b.textContent=o,2000);});
+}
+render();
+</script>
 </body>
 </html>
