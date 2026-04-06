@@ -3,209 +3,503 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TC Store Visit App ? SG</title>
+<title>TC Store Visit App - SG</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif; background:#F5F5F7; color:#1D1D1F; }
-.nav { background:rgba(255,255,255,0.92); backdrop-filter:blur(20px); border-bottom:0.5px solid #D2D2D7; padding:0 24px; height:52px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
-.nav-title { font-size:17px; font-weight:600; letter-spacing:-0.3px; }
-.nav-sub { font-size:11px; color:#6E6E73; margin-top:1px; }
-.nav-badge { font-size:11px; font-weight:600; background:#FF3B30; color:white; padding:3px 10px; border-radius:10px; }
-.main { max-width:1200px; margin:0 auto; padding:20px; }
-.sec { font-size:11px; font-weight:600; color:#6E6E73; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; }
-.stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
-.stat { background:white; border-radius:12px; border:0.5px solid #D2D2D7; padding:14px 16px; }
-.stat-n { font-size:28px; font-weight:600; letter-spacing:-1px; }
-.stat-l { font-size:11px; color:#6E6E73; margin-top:2px; }
-.nr{color:#FF3B30;} .no{color:#FF9500;} .ng{color:#34C759;} .ngr{color:#6E6E73;}
-.ctrl { display:flex; gap:7px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
-.sw { flex:1; min-width:160px; position:relative; }
-.sw input { width:100%; padding:7px 11px 7px 28px; border:0.5px solid #D2D2D7; border-radius:10px; font-size:13px; background:white; color:#1D1D1F; font-family:inherit; }
-.sw input:focus { outline:none; border-color:#007AFF; }
-.sic { position:absolute; left:9px; top:50%; transform:translateY(-50%); color:#6E6E73; font-size:12px; pointer-events:none; }
-.chip { font-size:11px; font-weight:500; padding:5px 12px; border-radius:20px; border:0.5px solid #D2D2D7; background:white; color:#6E6E73; cursor:pointer; font-family:inherit; }
-.chip.ca { background:#1D1D1F; border-color:#1D1D1F; color:white; }
-.cm-sel { font-size:12px; padding:5px 9px; border:0.5px solid #D2D2D7; border-radius:10px; background:white; color:#1D1D1F; font-family:inherit; }
-.srt { font-size:11px; padding:5px 9px; border:0.5px solid #D2D2D7; border-radius:10px; background:white; color:#1D1D1F; font-family:inherit; }
-.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:10px; }
-.card { background:white; border-radius:14px; border:0.5px solid #D2D2D7; overflow:hidden; cursor:pointer; transition:all .15s; }
-.card:hover { border-color:#007AFF; box-shadow:0 2px 12px rgba(0,122,255,0.1); transform:translateY(-1px); }
-.card.sel { border-color:#007AFF; border-width:1.5px; }
-.ch { padding:12px 14px 7px; display:flex; justify-content:space-between; align-items:flex-start; gap:6px; }
-.cn { font-size:12px; font-weight:600; color:#1D1D1F; line-height:1.3; flex:1; }
-.hb { font-size:10px; font-weight:600; padding:2px 8px; border-radius:7px; white-space:nowrap; flex-shrink:0; }
-.hb-strong,.hb-healthy{background:#D1FAE5;color:#065F46;} .hb-watch{background:#FEF3C7;color:#92400E;} .hb-at-risk{background:#FEE2E2;color:#991B1B;}
-.cm2 { padding:0 14px 7px; font-size:11px; color:#6E6E73; }
-.csig { padding:0 14px 8px; display:flex; gap:4px; flex-wrap:wrap; }
-.sig { font-size:10px; font-weight:500; padding:2px 7px; border-radius:6px; }
-.sig-r{background:#FEE2E2;color:#991B1B;} .sig-a{background:#FEF3C7;color:#92400E;} .sig-g{background:#D1FAE5;color:#065F46;} .sig-b{background:#DBEAFE;color:#1E40AF;} .sig-p{background:#EDE9FE;color:#5B21B6;}
-.cd { height:0.5px; background:#F5F5F7; margin:0 14px; }
-.ci { padding:8px 14px 12px; }
-.cil { font-size:10px; font-weight:600; color:#6E6E73; letter-spacing:0.4px; text-transform:uppercase; margin-bottom:2px; }
-.cit { font-size:12px; color:#3C3C43; line-height:1.5; }
-.mu{color:#34C759;font-weight:600;} .mf{color:#FF9500;} .md{color:#FF3B30;font-weight:600;}
-.ovl { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:200; }
-.ovl.open { display:flex; justify-content:flex-end; }
-.dp { background:white; width:460px; max-width:100%; height:100%; overflow-y:auto; display:flex; flex-direction:column; animation:sli .2s ease; }
-@keyframes sli{from{transform:translateX(30px);opacity:0;}to{transform:translateX(0);opacity:1;}}
-.dph { padding:15px 18px 12px; border-bottom:0.5px solid #F2F2F7; position:sticky; top:0; background:white; }
-.dpc { float:right; font-size:24px; line-height:1; color:#6E6E73; cursor:pointer; }
-.dpn { font-size:15px; font-weight:600; color:#1D1D1F; padding-right:28px; line-height:1.3; }
-.dpm { font-size:11px; color:#6E6E73; margin-top:3px; }
-.dpb { padding:14px 18px; flex:1; }
-.dph2 { background:#F5F5F7; border-radius:10px; padding:11px 13px; margin-bottom:10px; }
-.dhl { font-size:10px; font-weight:600; color:#6E6E73; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:2px; }
-.dhv { font-size:13px; color:#1D1D1F; line-height:1.5; }
-.dps { margin-bottom:15px; }
-.dpst { font-size:10px; font-weight:600; color:#6E6E73; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:5px; }
-.dpit { font-size:13px; color:#1D1D1F; padding:5px 0; border-bottom:0.5px solid #F5F5F7; line-height:1.5; }
-.dpit:last-child { border-bottom:none; }
-.dpit.mt { color:#6E6E73; font-style:italic; }
-.dpa { padding:12px 18px; border-top:0.5px solid #F2F2F7; display:flex; flex-direction:column; gap:7px; }
-.dpbtn { font-size:13px; font-weight:500; padding:9px 14px; border-radius:10px; border:0.5px solid #D2D2D7; background:#F5F5F7; color:#1D1D1F; cursor:pointer; font-family:inherit; text-align:left; }
-.dpbtn.pr { background:#1D1D1F; color:white; border-color:#1D1D1F; }
-.empty { text-align:center; padding:60px 20px; color:#6E6E73; font-size:14px; }
-.live-dot { width:7px; height:7px; border-radius:50%; background:#34C759; display:inline-block; margin-right:5px; animation:pulse 2s infinite; }
-@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
-@media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr);}.grid{grid-template-columns:1fr;}.dp{width:100%;}}
+:root{
+  --bg:#f3efe8;
+  --bg2:#ece7df;
+  --surface:#fffdf8;
+  --surface-2:#f7f2ea;
+  --line:#d7cfc2;
+  --line-strong:#c9beae;
+  --text:#1f1b16;
+  --muted:#6c655d;
+  --accent:#1f3c88;
+  --danger:#c94b3c;
+  --danger-soft:#f8dfd9;
+  --warn:#c1841c;
+  --warn-soft:#f6e7c8;
+  --success:#2e8b57;
+  --success-soft:#dcefe3;
+  --neutral-soft:#ebe6de;
+  --shadow:0 18px 40px rgba(31,27,22,0.06);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Georgia,'Times New Roman',serif;background:linear-gradient(180deg,var(--bg2) 0%,var(--bg) 180px,var(--bg) 100%);color:var(--text);}
+button,input,select{font:inherit;}
+.topbar{position:sticky;top:0;z-index:100;background:rgba(255,253,248,0.9);backdrop-filter:blur(18px);border-bottom:1px solid rgba(201,190,174,0.7);}
+.topbar-inner{max-width:1320px;margin:0 auto;padding:18px 24px;display:flex;justify-content:space-between;gap:20px;align-items:flex-start;}
+.eyebrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;color:var(--muted);letter-spacing:0.04em;text-transform:uppercase;}
+.live{display:flex;gap:8px;align-items:center;}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 0 4px rgba(46,139,87,0.14);}
+.title{font-size:40px;line-height:1;letter-spacing:-0.03em;font-weight:700;margin-top:8px;}
+.subhead{margin-top:8px;font-size:18px;line-height:1.4;color:#3e3831;max-width:720px;}
+.top-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;font-family:'Helvetica Neue',Arial,sans-serif;}
+.meta-chip{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,0.7);font-size:12px;color:var(--muted);}
+.alert-pill{padding:10px 14px;border-radius:999px;background:var(--danger);color:#fff;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;}
+.main{max-width:1320px;margin:0 auto;padding:28px 24px 40px;}
+.section-label{font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+.stat:before{content:'';position:absolute;left:0;top:0;right:0;height:4px;background:var(--line);}
+.stat.danger:before{background:var(--danger);}
+.stat.warn:before{background:var(--warn);}
+.stat.success:before{background:var(--success);}
+.stat.neutral:before{background:#8f8578;}
+.stat-value{font-family:'Helvetica Neue',Arial,sans-serif;font-size:42px;font-weight:800;letter-spacing:-0.05em;}
+.stat-value.danger{color:var(--danger);}
+.stat-value.warn{color:var(--warn);}
+.stat-value.success{color:var(--success);}
+.stat-value.neutral{color:#61584f;}
+.stat-label{margin-top:8px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#4f473f;}
+.stat-note{margin-top:6px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.4;color:var(--muted);}
+.controls{display:grid;grid-template-columns:minmax(240px,1.2fr) repeat(4,max-content);gap:10px;align-items:center;background:rgba(255,253,248,0.82);border:1px solid var(--line);border-radius:22px;padding:14px 16px;box-shadow:var(--shadow);margin-bottom:18px;}
+.search-wrap{position:relative;}
+.search-wrap input{width:100%;padding:13px 16px 13px 42px;border-radius:16px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;}
+.search-wrap input:focus,.select-wrap select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(31,60,136,0.12);}
+.search-icon{position:absolute;left:16px;top:50%;transform:translateY(-50%);font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;color:var(--muted);}
+.chips{display:flex;gap:8px;flex-wrap:wrap;}
+.chip{padding:10px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:#4f473f;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:0.03em;cursor:pointer;}
+.chip.active{background:var(--text);border-color:var(--text);color:#fff;}
+.select-wrap select{padding:12px 14px;border-radius:16px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;min-width:170px;}
+.retailer-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:18px;}
+.retailer-card{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:var(--shadow);cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;}
+.retailer-card:hover{transform:translateY(-2px);border-color:var(--line-strong);box-shadow:0 22px 40px rgba(31,27,22,0.08);}
+.retailer-card.active{border-color:var(--accent);box-shadow:0 0 0 2px rgba(31,60,136,0.1),0 22px 40px rgba(31,27,22,0.08);}
+.retailer-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}
+.retailer-name{font-size:24px;line-height:1.05;letter-spacing:-0.03em;font-weight:700;}
+.retailer-meta{margin-top:8px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;}
+.pill-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.health-pill,.trend-pill,.signal-pill{padding:6px 10px;border-radius:999px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;}
+.health-pill.strong,.health-pill.healthy{background:var(--success-soft);color:#1e6a43;}
+.health-pill.watch{background:var(--warn-soft);color:#8b5f12;}
+.health-pill.at-risk{background:var(--danger-soft);color:#9d3427;}
+.trend-pill.up{background:var(--success-soft);color:#1e6a43;}
+.trend-pill.flat{background:var(--neutral-soft);color:#62584c;}
+.trend-pill.down{background:var(--danger-soft);color:#9d3427;}
+.signal-pill{background:var(--surface-2);color:#554d44;}
+.driver{margin-top:16px;font-size:16px;line-height:1.55;color:#2f2922;}
+.driver strong{font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);display:block;margin-bottom:7px;}
+.retailer-action{margin-top:14px;padding-top:14px;border-top:1px solid rgba(201,190,174,0.65);font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.5;color:#3b352e;}
+.retailer-action span{display:block;margin-bottom:5px;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);}
+.focus{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-bottom:18px;}
+.focus-card{background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:22px;box-shadow:var(--shadow);}
+.focus-header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px;}
+.focus-title{font-size:32px;line-height:1;letter-spacing:-0.04em;font-weight:700;}
+.focus-sub{margin-top:8px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;color:var(--muted);}
+.focus-summary{font-size:18px;line-height:1.55;color:#2c271f;margin-bottom:18px;max-width:760px;}
+.focus-panels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.focus-panel{background:var(--surface-2);border:1px solid rgba(201,190,174,0.55);border-radius:18px;padding:16px;}
+.panel-label{font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px;}
+.panel-value{font-size:15px;line-height:1.5;color:#2f2922;}
+.focus-list{display:flex;flex-direction:column;gap:10px;}
+.focus-item{padding:13px 14px;border:1px solid rgba(201,190,174,0.7);border-radius:16px;background:var(--surface-2);}
+.focus-item strong{display:block;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:4px;}
+.focus-item div{font-size:15px;line-height:1.45;color:#2f2922;}
+.stores-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;margin-bottom:12px;}
+.stores-copy{font-size:15px;line-height:1.5;color:#484037;max-width:720px;}
+.store-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:14px;}
+.store-card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:16px;box-shadow:var(--shadow);cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;}
+.store-card:hover{transform:translateY(-2px);border-color:var(--line-strong);box-shadow:0 22px 40px rgba(31,27,22,0.08);}
+.store-card.selected{border-color:var(--accent);box-shadow:0 0 0 2px rgba(31,60,136,0.1),0 22px 40px rgba(31,27,22,0.08);}
+.store-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}
+.store-name{font-family:'Helvetica Neue',Arial,sans-serif;font-size:17px;font-weight:700;line-height:1.25;}
+.store-meta{margin-top:8px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;color:var(--muted);line-height:1.5;}
+.signal-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+.store-block{margin-top:14px;padding-top:14px;border-top:1px solid rgba(201,190,174,0.65);}
+.store-block .label{font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:7px;}
+.store-block .text{font-size:15px;line-height:1.55;color:#2f2922;}
+.store-block.action .text{font-family:'Helvetica Neue',Arial,sans-serif;font-weight:700;color:#24201a;}
+.empty{padding:42px 20px;border:1px dashed var(--line);border-radius:18px;background:rgba(255,253,248,0.5);text-align:center;font-family:'Helvetica Neue',Arial,sans-serif;color:var(--muted);}
+.ovl{display:none;position:fixed;inset:0;background:rgba(20,17,14,0.38);z-index:220;}
+.ovl.open{display:flex;justify-content:flex-end;}
+.dp{background:var(--surface);width:500px;max-width:100%;height:100%;overflow-y:auto;display:flex;flex-direction:column;animation:sli .2s ease;}
+@keyframes sli{from{transform:translateX(28px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+.dph{padding:20px 22px 16px;border-bottom:1px solid rgba(201,190,174,0.75);position:sticky;top:0;background:rgba(255,253,248,0.96);backdrop-filter:blur(12px);}
+.dpc{float:right;font-family:'Helvetica Neue',Arial,sans-serif;font-size:24px;line-height:1;color:var(--muted);cursor:pointer;}
+.dpn{font-size:26px;line-height:1.1;letter-spacing:-0.03em;font-weight:700;padding-right:28px;}
+.dpm{margin-top:8px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.5;color:var(--muted);}
+.dpb{padding:18px 22px;flex:1;}
+.dph2{background:var(--surface-2);border:1px solid rgba(201,190,174,0.6);border-radius:18px;padding:16px;margin-bottom:12px;}
+.dhl{font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;}
+.dhv{font-size:16px;line-height:1.55;color:#2f2922;}
+.dps{margin-bottom:18px;}
+.dpst{font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;}
+.dpit{font-size:15px;color:#2f2922;padding:7px 0;border-bottom:1px solid rgba(201,190,174,0.45);line-height:1.5;}
+.dpit:last-child{border-bottom:none;}
+.dpit.mt{color:var(--muted);font-style:italic;}
+.dpit.alert{color:#9d3427;}
+.dpa{padding:14px 22px 22px;border-top:1px solid rgba(201,190,174,0.75);display:flex;flex-direction:column;gap:8px;}
+.dpbtn{font-family:'Helvetica Neue',Arial,sans-serif;font-size:14px;font-weight:700;padding:12px 16px;border-radius:14px;border:1px solid var(--line);background:var(--surface-2);color:var(--text);cursor:pointer;text-align:left;}
+.dpbtn.pr{background:var(--text);color:#fff;border-color:var(--text);}
+@media(max-width:1100px){
+  .controls{grid-template-columns:1fr;justify-items:stretch;}
+  .focus{grid-template-columns:1fr;}
+  .focus-panels{grid-template-columns:1fr;}
+}
+@media(max-width:720px){
+  .topbar-inner{padding:16px;}
+  .main{padding:20px 16px 28px;}
+  .title{font-size:31px;}
+  .stats{grid-template-columns:repeat(2,1fr);}
+  .retailer-grid,.store-grid{grid-template-columns:1fr;}
+  .focus-panels{grid-template-columns:1fr;}
+  .select-wrap select{width:100%;}
+}
 </style>
 </head>
 <body>
-<div class="nav">
-  <div>
-    <div class="nav-title">TC Store Visit App ? SG</div>
-    <div class="nav-sub"><span class="live-dot"></span>Live ? Q2 W15 ? Updated 6 Apr 2026</div>
+<div class="topbar">
+  <div class="topbar-inner">
+    <div>
+      <div class="eyebrow">
+        <span class="live"><span class="live-dot"></span>Live dashboard</span>
+        <span>SG market</span>
+        <span>Q2 W15</span>
+      </div>
+      <div class="title">TC Store Visit App - SG</div>
+      <div class="subhead" id="hero-summary">2 retailers on watch this week</div>
+      <div class="top-meta">
+        <span class="meta-chip">Updated 6 Apr 2026</span>
+        <span class="meta-chip">2 retailers tracked</span>
+        <span class="meta-chip">2 stores with live analysis</span>
+      </div>
+    </div>
+    <div class="alert-pill" id="alert-pill">0 retailers at risk</div>
   </div>
-  <span class="nav-badge">0 at risk</span>
 </div>
 <div class="main">
+  <div class="section-label">Retailer signal</div>
   <div class="stats">
-    <div class="stat"><div class="stat-n nr">0</div><div class="stat-l">At risk</div></div>
-    <div class="stat"><div class="stat-n no">2</div><div class="stat-l">Watch</div></div>
-    <div class="stat"><div class="stat-n ng">0</div><div class="stat-l">Healthy</div></div>
-    <div class="stat"><div class="stat-n ngr">0</div><div class="stat-l">Not visited 7d+</div></div>
+    <div class="stat danger"><div class="stat-value danger">0</div><div class="stat-label">Retailers at risk</div><div class="stat-note">Immediate intervention recommended.</div></div>
+    <div class="stat warn"><div class="stat-value warn">2</div><div class="stat-label">Retailers on watch</div><div class="stat-note">Need closer follow-up this week.</div></div>
+    <div class="stat success"><div class="stat-value success">2</div><div class="stat-label">Stores needing follow-up</div><div class="stat-note">Watch stores, at-risk stores, and stale doors.</div></div>
+    <div class="stat neutral"><div class="stat-value neutral">0</div><div class="stat-label">Retailers with stale coverage</div><div class="stat-note">Retailers with at least one store not visited in 7+ days.</div></div>
   </div>
-  <div class="ctrl">
-    <div class="sw"><span class="sic">?</span><input type="text" id="srch" placeholder="Search store..." oninput="render()"></div>
-    <button class="chip ca" onclick="sf('all',this)">All (2)</button>
-    <button class="chip" onclick="sf('at-risk',this)">? At risk</button>
-    <button class="chip" onclick="sf('watch',this)">? Watch</button>
-    <button class="chip" onclick="sf('healthy',this)">? Healthy</button>
-    <button class="chip" onclick="sf('stale',this)">? 7d+</button>
-    <select class="cm-sel" id="cm-sel" onchange="render()">
-      <option value="">All staff</option>
-      <option value="fanny">fanny</option>
-    </select>
-    <select class="srt" id="srt" onchange="render()">
-      <option value="risk">Risk first</option>
-      <option value="recent">Most recent</option>
-      <option value="stale">Least visited</option>
-      <option value="alpha">A?Z</option>
-    </select>
+
+  <div class="controls">
+    <div class="search-wrap">
+      <span class="search-icon">Search</span>
+      <input type="text" id="srch" placeholder="Search retailer or store" oninput="render()">
+    </div>
+    <div class="chips">
+      <button class="chip active" data-filter="all" onclick="setFilter('all', this)">All</button>
+      <button class="chip" data-filter="at-risk" onclick="setFilter('at-risk', this)">At risk</button>
+      <button class="chip" data-filter="watch" onclick="setFilter('watch', this)">Watch</button>
+      <button class="chip" data-filter="healthy" onclick="setFilter('healthy', this)">Healthy</button>
+      <button class="chip" data-filter="stale" onclick="setFilter('stale', this)">Stale 7d+</button>
+    </div>
+    <div class="select-wrap">
+      <select id="retailer-sel" onchange="setRetailer(this.value)">
+        <option value="">All retailers</option>
+        <option value="Challenger">Challenger</option><option value="Harvey Norman">Harvey Norman</option>
+      </select>
+    </div>
+    <div class="select-wrap">
+      <select id="cm-sel" onchange="render()">
+        <option value="">All staff</option>
+        <option value="fanny">fanny</option>
+      </select>
+    </div>
+    <div class="select-wrap">
+      <select id="srt" onchange="render()">
+        <option value="urgency">Urgency first</option>
+        <option value="trend">Trend movement</option>
+        <option value="recent">Most recent</option>
+        <option value="stale">Least visited</option>
+        <option value="alpha">A-Z</option>
+      </select>
+    </div>
   </div>
-  <div class="grid" id="grid"></div>
-  <div class="empty" id="empty" style="display:none">No stores match.</div>
+
+  <div class="section-label">Retailer overview</div>
+  <div class="retailer-grid" id="retailer-grid"></div>
+
+  <div class="focus" id="focus"></div>
+
+  <div class="stores-head">
+    <div>
+      <div class="section-label" style="margin-bottom:6px">Store evidence</div>
+      <div class="stores-copy" id="stores-copy">Store-level evidence backing the retailer story.</div>
+    </div>
+  </div>
+  <div class="store-grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none">No stores match the current retailer and filter combination.</div>
 </div>
 <div class="ovl" id="ovl" onclick="mc(event)">
   <div class="dp" id="dp">
-    <div class="dph"><span class="dpc" onclick="cdp()">?</span><div class="dpn" id="dpn"></div><div class="dpm" id="dpm"></div></div>
+    <div class="dph"><span class="dpc" onclick="cdp()">x</span><div class="dpn" id="dpn"></div><div class="dpm" id="dpm"></div></div>
     <div class="dpb" id="dpb"></div>
     <div class="dpa" id="dpa"></div>
   </div>
 </div>
 <script>
 const D=[{"store_name":"Challenger @ ION","country":"SG","cm_name":"fanny","last_visit":"2026-06-03T16:00:00.000Z","days_ago":-59,"overall_health":"watch","stock_status":"amber","stock_summary":"(analysis unavailable)","stock_skus_at_risk":[],"momentum":"flat","momentum_summary":"(analysis unavailable)","competitor_level":"none","competitor_threats":[],"training_urgency":"none","training_gaps":[],"key_insight":"(analysis unavailable ? check logs)","recommended_action":"(analysis unavailable)","staff_relationship":"warm","total_visits":2},{"store_name":"Harvey Norman @ Parkway Parade","country":"SG","cm_name":"fanny","last_visit":"2026-06-03T16:00:00.000Z","days_ago":-59,"overall_health":"watch","stock_status":"amber","stock_summary":"Era 300 display unit damaged and requires replacement; Era 100 performing well but Arc Ultra momentum is weak.","stock_skus_at_risk":["Arc Ultra","Era 300"],"momentum":"flat","momentum_summary":"Era 100 sales solid (3 units/week) but Arc Ultra stalled at 1 unit; low foot traffic suggests broader store slowdown.","competitor_level":"high","competitor_threats":["Bose promoter actively demoing in-store near TC Acoustic section","Arc Ultra underperforming against competitor pressure"],"training_urgency":"high","training_gaps":["Yuan unfamiliar with Trueplay feature on Arc Ultra","Insufficient Arc Ultra product knowledge among floor staff"],"key_insight":"Arc Ultra is losing to Bose on-site demos due to staff knowledge gaps?urgent retraining on Trueplay and demo execution required to recapture momentum.","recommended_action":"Conduct hands-on Arc Ultra training (Trueplay focus) with Henry and Yuan within 7 days, and expedite Era 300 demo unit replacement to restore visual presence.","staff_relationship":"warm","total_visits":2}];
-let AF='all',SS=null;
-const HBC={strong:'hb-strong',healthy:'hb-healthy',watch:'hb-watch','at-risk':'hb-at-risk'};
-const HBL={strong:'STRONG',healthy:'HEALTHY',watch:'WATCH','at-risk':'AT RISK'};
-const MC={up:'mu',flat:'mf',down:'md'};
-const MI={up:'?',flat:'?',down:'?'};
+let AF='all', SR='', SS=null;
+const HBC={strong:'strong',healthy:'healthy',watch:'watch','at-risk':'at-risk'};
+const HBL={strong:'Strong',healthy:'Healthy',watch:'Watch','at-risk':'At risk'};
+const TREND_LABEL={up:'Up',flat:'Flat',down:'Down'};
+const TREND_CLASS={up:'up',flat:'flat',down:'down'};
 const SP={'at-risk':0,watch:1,healthy:2,strong:3};
-function sigs(r){
+
+function esc(v){
+  return String(v || '').replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+function retailerName(storeName){
+  return String(storeName || '').split(' @ ')[0].trim() || 'Unknown retailer';
+}
+
+function dedupe(arr){
+  return Array.from(new Set(arr.filter(Boolean)));
+}
+
+function urgencyScore(r){
+  let score=(SP[r.overall_health] ?? 1) * 10;
+  if(r.days_ago > 7) score -= 4;
+  if(r.stock_status === 'red') score -= 3;
+  else if(r.stock_status === 'amber') score -= 1;
+  if(r.competitor_level === 'high') score -= 2;
+  else if(r.competitor_level === 'low') score -= 1;
+  if(r.training_urgency === 'high') score -= 1;
+  if(r.momentum === 'down') score -= 2;
+  else if(r.momentum === 'up') score += 1;
+  return score;
+}
+
+function signalPills(r){
   const s=[];
-  if(r.stock_status==='red')s.push(['? Stock','sig-r']);
-  else if(r.stock_status==='amber')s.push(['? Stock','sig-a']);
-  if(r.competitor_level==='high')s.push(['?? Competitor','sig-p']);
-  else if(r.competitor_level==='low')s.push(['? Competitor','sig-p']);
-  if(r.training_urgency==='high')s.push(['? Training','sig-b']);
-  if(r.momentum==='up')s.push(['? Up','sig-g']);
-  else if(r.momentum==='down')s.push(['? Down','sig-r']);
-  if(r.days_ago>7)s.push(['? '+r.days_ago+'d','sig-a']);
+  if(r.stock_status === 'red') s.push(['Stock risk','signal-pill']);
+  else if(r.stock_status === 'amber') s.push(['Stock watch','signal-pill']);
+  if(r.competitor_level === 'high') s.push(['High competitor pressure','signal-pill']);
+  else if(r.competitor_level === 'low') s.push(['Competitor activity','signal-pill']);
+  if(r.training_urgency === 'high') s.push(['Training gap','signal-pill']);
+  if(r.days_ago > 7) s.push(['Stale ' + r.days_ago + 'd','signal-pill']);
   return s;
 }
-function filt(){
-  const q=document.getElementById('srch').value.toLowerCase();
-  const cm=document.getElementById('cm-sel').value;
-  const srt=document.getElementById('srt').value;
-  let data=D.filter(r=>{
-    if(q&&!r.store_name.toLowerCase().includes(q))return false;
-    if(cm&&r.cm_name!==cm)return false;
-    if(AF==='all')return true;
-    if(AF==='at-risk')return r.overall_health==='at-risk';
-    if(AF==='watch')return r.overall_health==='watch';
-    if(AF==='healthy')return r.overall_health==='healthy'||r.overall_health==='strong';
-    if(AF==='stale')return r.days_ago>7;
-    return true;
+
+function buildRetailers(data){
+  const grouped={};
+  data.forEach(r=>{
+    const name=retailerName(r.store_name);
+    if(!grouped[name]) grouped[name]=[];
+    grouped[name].push(r);
   });
-  data.sort((a,b)=>{
-    if(srt==='risk'){const d=(SP[a.overall_health]??1)-(SP[b.overall_health]??1);return d!==0?d:a.days_ago-b.days_ago;}
-    if(srt==='recent')return a.days_ago-b.days_ago;
-    if(srt==='stale')return b.days_ago-a.days_ago;
-    return a.store_name.localeCompare(b.store_name);
+
+  return Object.keys(grouped).map(name=>{
+    const stores=grouped[name].slice().sort((a,b)=>urgencyScore(a)-urgencyScore(b));
+    const healths=stores.map(s=>s.overall_health);
+    const worst=healths.sort((a,b)=>(SP[a] ?? 1)-(SP[b] ?? 1))[0] || 'watch';
+    const staleCount=stores.filter(s=>s.days_ago > 7).length;
+    const downCount=stores.filter(s=>s.momentum === 'down').length;
+    const upCount=stores.filter(s=>s.momentum === 'up').length;
+    const stockRisk=stores.filter(s=>s.stock_status === 'red').length;
+    const stockWatch=stores.filter(s=>s.stock_status === 'amber').length;
+    const compHigh=stores.filter(s=>s.competitor_level === 'high').length;
+    const trainingHigh=stores.filter(s=>s.training_urgency === 'high').length;
+    const trend=downCount > upCount ? 'down' : upCount > downCount ? 'up' : 'flat';
+    const topStores=stores.slice(0,3).map(s=>s.store_name);
+    const actions=dedupe(stores.map(s=>s.recommended_action)).slice(0,2);
+    const drivers=[];
+    if(stockRisk) drivers.push('stock gaps in ' + stockRisk + ' store' + (stockRisk === 1 ? '' : 's'));
+    else if(stockWatch) drivers.push('stock watch signals in ' + stockWatch + ' store' + (stockWatch === 1 ? '' : 's'));
+    if(compHigh) drivers.push('strong competitor pressure in ' + compHigh + ' store' + (compHigh === 1 ? '' : 's'));
+    if(trainingHigh) drivers.push('staff coaching gaps in ' + trainingHigh + ' store' + (trainingHigh === 1 ? '' : 's'));
+    if(staleCount) drivers.push(staleCount + ' stale visit' + (staleCount === 1 ? '' : 's'));
+    if(!drivers.length) drivers.push(trend === 'up' ? 'positive momentum across recent visits' : 'stable signals across recent visits');
+    const driverSummary=(trend === 'down' ? 'Sales pressure driven by ' : trend === 'up' ? 'Retailer lift driven by ' : 'Retailer performance shaped by ') + drivers.slice(0,3).join(', ') + '.';
+    const actionHint=actions[0] || 'Review the highest-priority stores and align next actions.';
+    const recent=stores.filter(s=>s.days_ago === 0).length;
+
+    return {name,stores,worst,staleCount,trend,stockRisk,stockWatch,compHigh,trainingHigh,topStores,driverSummary,actionHint,recent};
+  }).sort((a,b)=>{
+    const srt=document.getElementById('srt') ? document.getElementById('srt').value : 'urgency';
+    if(srt === 'trend'){
+      const order={down:0,flat:1,up:2};
+      const d=(order[a.trend] ?? 1)-(order[b.trend] ?? 1);
+      return d !== 0 ? d : (SP[a.worst] ?? 1)-(SP[b.worst] ?? 1);
+    }
+    if(srt === 'recent') return Math.min(...a.stores.map(s=>s.days_ago)) - Math.min(...b.stores.map(s=>s.days_ago));
+    if(srt === 'stale') return b.staleCount - a.staleCount;
+    if(srt === 'alpha') return a.name.localeCompare(b.name);
+    const risk=(SP[a.worst] ?? 1)-(SP[b.worst] ?? 1);
+    if(risk !== 0) return risk;
+    return b.staleCount - a.staleCount;
   });
-  return data;
 }
-function render(){
-  const data=filt();
+
+function matchesFilter(r){
+  if(AF === 'all') return true;
+  if(AF === 'at-risk') return r.overall_health === 'at-risk';
+  if(AF === 'watch') return r.overall_health === 'watch';
+  if(AF === 'healthy') return r.overall_health === 'healthy' || r.overall_health === 'strong';
+  if(AF === 'stale') return r.days_ago > 7;
+  return true;
+}
+
+function filteredStores(){
+  const q=document.getElementById('srch').value.toLowerCase().trim();
+  const cm=document.getElementById('cm-sel').value;
+  return D.filter(r=>{
+    const retailer=retailerName(r.store_name);
+    if(SR && retailer !== SR) return false;
+    if(cm && r.cm_name !== cm) return false;
+    if(q && !r.store_name.toLowerCase().includes(q) && !retailer.toLowerCase().includes(q)) return false;
+    return matchesFilter(r);
+  }).sort((a,b)=>{
+    const srt=document.getElementById('srt').value;
+    if(srt === 'trend'){
+      const order={down:0,flat:1,up:2};
+      const d=(order[a.momentum] ?? 1)-(order[b.momentum] ?? 1);
+      return d !== 0 ? d : urgencyScore(a)-urgencyScore(b);
+    }
+    if(srt === 'recent') return a.days_ago - b.days_ago;
+    if(srt === 'stale') return b.days_ago - a.days_ago;
+    if(srt === 'alpha') return a.store_name.localeCompare(b.store_name);
+    return urgencyScore(a)-urgencyScore(b);
+  });
+}
+
+function retailerMatchesSearch(retailer,q){
+  if(!q) return true;
+  if(retailer.name.toLowerCase().includes(q)) return true;
+  return retailer.stores.some(s=>s.store_name.toLowerCase().includes(q));
+}
+
+function renderRetailers(stores){
+  const q=document.getElementById('srch').value.toLowerCase().trim();
+  const retailers=buildRetailers(stores.length ? stores : filteredStores()).filter(r=>retailerMatchesSearch(r,q));
+  const wrap=document.getElementById('retailer-grid');
+  if(!retailers.length){
+    wrap.innerHTML='<div class="empty">No retailer summaries match the current filters.</div>';
+    if(SR){SR='';document.getElementById('retailer-sel').value='';}
+    return [];
+  }
+  if(!SR) SR=retailers[0].name;
+  if(!retailers.some(r=>r.name===SR)){SR=retailers[0].name;document.getElementById('retailer-sel').value=SR;}
+  wrap.innerHTML=retailers.map(r=>{
+    const active=SR===r.name?'active':'';
+    return '<div class="retailer-card '+active+'" onclick="setRetailer(\''+r.name.replace(/'/g,"\\'")+'\')">'+
+      '<div class="retailer-top"><div><div class="retailer-name">'+esc(r.name)+'</div><div class="retailer-meta">'+r.stores.length+' stores ? '+r.recent+' updated today</div></div><span class="health-pill '+(HBC[r.worst]||'watch')+'">'+esc(HBL[r.worst]||'Watch')+'</span></div>'+
+      '<div class="pill-row"><span class="trend-pill '+(TREND_CLASS[r.trend]||'flat')+'">'+esc(TREND_LABEL[r.trend]||'Flat')+'</span>'+(r.staleCount?'<span class="signal-pill">'+r.staleCount+' stale visit'+(r.staleCount===1?'':'s')+'</span>':'')+(r.stockRisk?'<span class="signal-pill">'+r.stockRisk+' stock risk</span>':'')+(r.compHigh?'<span class="signal-pill">'+r.compHigh+' competitor pressure</span>':'')+'</div>'+
+      '<div class="driver"><strong>Why performance is moving</strong>'+esc(r.driverSummary)+'</div>'+
+      '<div class="retailer-action"><span>Next move</span>'+esc(r.actionHint)+'</div>'+
+    '</div>';
+  }).join('');
+  return retailers;
+}
+
+function renderFocus(retailers){
+  const target=retailers.find(r=>r.name===SR) || retailers[0];
+  const focus=document.getElementById('focus');
+  const storesCopy=document.getElementById('stores-copy');
+  if(!target){
+    focus.innerHTML='';
+    storesCopy.textContent='Store-level evidence backing the retailer story.';
+    return;
+  }
+  storesCopy.textContent='Store-level evidence for ' + target.name + '. Open any card for a full pre-call brief.';
+  document.getElementById('hero-summary').textContent=target.name + ': ' + target.driverSummary;
+  document.getElementById('alert-pill').textContent=target.worst === 'at-risk' ? 'At risk retailer selected' : target.staleCount ? target.staleCount + ' stale visit' + (target.staleCount === 1 ? '' : 's') : 'Retailer in focus';
+  focus.innerHTML=
+    '<div class="focus-card">'+
+      '<div class="focus-header"><div><div class="focus-title">'+esc(target.name)+'</div><div class="focus-sub">'+target.stores.length+' stores in scope ? '+(target.staleCount?target.staleCount+' stale visit'+(target.staleCount===1?'':'s'):'coverage current')+'</div></div><div class="pill-row"><span class="health-pill '+(HBC[target.worst]||'watch')+'">'+esc(HBL[target.worst]||'Watch')+'</span><span class="trend-pill '+(TREND_CLASS[target.trend]||'flat')+'">'+esc(TREND_LABEL[target.trend]||'Flat')+'</span></div></div>'+
+      '<div class="focus-summary">'+esc(target.driverSummary)+'</div>'+
+      '<div class="focus-panels">'+
+        '<div class="focus-panel"><div class="panel-label">What is happening</div><div class="panel-value">'+esc(target.driverSummary)+'</div></div>'+
+        '<div class="focus-panel"><div class="panel-label">What to do</div><div class="panel-value">'+esc(target.actionHint)+'</div></div>'+
+        '<div class="focus-panel"><div class="panel-label">Where to focus</div><div class="panel-value">'+target.topStores.map(esc).join('<br>')+'</div></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="focus-card"><div class="section-label" style="margin-bottom:10px">Priority drivers</div><div class="focus-list">'+
+      '<div class="focus-item"><strong>Stock</strong><div>'+(target.stockRisk ? target.stockRisk+' stores with red stock risk signals.' : target.stockWatch ? target.stockWatch+' stores on stock watch.' : 'No major stock pressure flagged in the latest visits.')+'</div></div>'+
+      '<div class="focus-item"><strong>Competition</strong><div>'+(target.compHigh ? target.compHigh+' stores reporting strong competitor pressure.' : 'Competitor activity is not the lead issue right now.')+'</div></div>'+
+      '<div class="focus-item"><strong>Training and coverage</strong><div>'+(target.trainingHigh ? target.trainingHigh+' stores need staff coaching. ' : 'No major coaching gap flagged. ')+(target.staleCount ? target.staleCount+' stale visit'+(target.staleCount===1?' is':'s are')+' reducing confidence.' : 'Visit coverage is current.')+'</div></div>'+
+    '</div></div>';
+}
+
+function renderStores(data){
   const grid=document.getElementById('grid');
   const empty=document.getElementById('empty');
-  if(!data.length){grid.innerHTML='';empty.style.display='block';return;}
+  if(!data.length){
+    grid.innerHTML='';
+    empty.style.display='block';
+    return;
+  }
   empty.style.display='none';
   grid.innerHTML=data.map(r=>{
-    const sg=sigs(r);
-    const sel=SS===r.store_name?'sel':'';
-    const esc=r.store_name.replace(/'/g,"\'");
-    return '<div class="card '+sel+'" onclick="odp(''+esc+'')">'+
-      '<div class="ch"><span class="cn">'+r.store_name+'</span><span class="hb '+(HBC[r.overall_health]||'hb-watch')+'">'+(HBL[r.overall_health]||'WATCH')+'</span></div>'+
-      '<div class="cm2">'+r.cm_name+' ? '+r.total_visits+'v ? '+(r.days_ago===0?'today':r.days_ago+'d ago')+'</div>'+
-      (sg.length?'<div class="csig">'+sg.map(s=>'<span class="sig '+s[1]+'">'+s[0]+'</span>').join('')+'</div>':'')+
-      '<div class="cd"></div>'+
-      '<div class="ci"><div class="cil">Key insight</div><div class="cit"><span class="'+(MC[r.momentum])+'">'+MI[r.momentum]+'</span> '+r.key_insight+'</div></div>'+
+    const sg=signalPills(r);
+    const sel=SS===r.store_name?'selected':'';
+    const escName=r.store_name.replace(/'/g,"\\'");
+    return '<div class="store-card '+sel+'" onclick="odp(\''+escName+'\')">'+
+      '<div class="store-top"><div><div class="store-name">'+esc(r.store_name)+'</div><div class="store-meta">'+esc(retailerName(r.store_name))+' ? '+esc(r.cm_name)+' ? '+r.total_visits+' visits ? last '+(r.days_ago===0?'today':r.days_ago+'d ago')+'</div></div><span class="health-pill '+(HBC[r.overall_health]||'watch')+'">'+esc(HBL[r.overall_health]||'Watch')+'</span></div>'+
+      (sg.length?'<div class="signal-row">'+sg.map(s=>'<span class="'+s[1]+'">'+esc(s[0])+'</span>').join('')+'<span class="trend-pill '+(TREND_CLASS[r.momentum]||'flat')+'">'+esc(TREND_LABEL[r.momentum]||'Flat')+'</span></div>':'<div class="signal-row"><span class="trend-pill '+(TREND_CLASS[r.momentum]||'flat')+'">'+esc(TREND_LABEL[r.momentum]||'Flat')+'</span></div>')+
+      '<div class="store-block"><div class="label">What is happening</div><div class="text">'+esc(r.key_insight)+'</div></div>'+
+      '<div class="store-block action"><div class="label">What to do next</div><div class="text">'+esc(r.recommended_action)+'</div></div>'+
     '</div>';
   }).join('');
 }
-function sf(f,el){AF=f;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('ca'));el.classList.add('ca');render();}
+
+function render(){
+  const allStores=filteredStores();
+  const retailers=renderRetailers(allStores);
+  renderFocus(retailers);
+  const visibleStores=allStores.filter(r=>!SR || retailerName(r.store_name)===SR);
+  renderStores(visibleStores);
+}
+
+function setFilter(filter,el){
+  AF=filter;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  if(el) el.classList.add('active');
+  render();
+}
+
+function setRetailer(name){
+  SR=name || '';
+  document.getElementById('retailer-sel').value=SR;
+  render();
+}
+
 function odp(name){
   SS=name;
   const r=D.find(x=>x.store_name===name);if(!r)return;
+  SR=retailerName(r.store_name);
+  document.getElementById('retailer-sel').value=SR;
   document.getElementById('dpn').textContent=name;
-  document.getElementById('dpm').textContent='CM: '+r.cm_name+' ? '+r.total_visits+' visits ? Last: '+(r.days_ago===0?'today':r.days_ago+'d ago');
-  const mc=MC[r.momentum],mi=MI[r.momentum];
+  document.getElementById('dpm').textContent='Retailer: '+retailerName(r.store_name)+' ? CM: '+r.cm_name+' ? '+r.total_visits+' visits ? Last: '+(r.days_ago===0?'today':r.days_ago+'d ago');
   document.getElementById('dpb').innerHTML=
-    '<div class="dph2"><div class="dhl">Key insight</div><div class="dhv">'+r.key_insight+'</div></div>'+
-    '<div class="dph2"><div class="dhl">Recommended action</div><div class="dhv"><strong>'+r.recommended_action+'</strong></div></div>'+
-    '<div class="dps"><div class="dpst">Momentum</div><div class="dpit"><span class="'+mc+'">'+mi+' '+r.momentum.toUpperCase()+'</span> ? '+r.momentum_summary+'</div></div>'+
-    '<div class="dps"><div class="dpst">Stock ? '+r.stock_status.toUpperCase()+'</div>'+
-      '<div class="dpit">'+r.stock_summary+'</div>'+
-      (r.stock_skus_at_risk.length?r.stock_skus_at_risk.map(s=>'<div class="dpit" style="color:#FF3B30">? '+s+'</div>').join(''):'<div class="dpit mt">No SKUs flagged</div>')+
+    '<div class="dph2"><div class="dhl">What is happening</div><div class="dhv">'+esc(r.key_insight)+'</div></div>'+
+    '<div class="dph2"><div class="dhl">What to do next</div><div class="dhv"><strong>'+esc(r.recommended_action)+'</strong></div></div>'+
+    '<div class="dps"><div class="dpst">Momentum</div><div class="dpit"><strong>'+esc(TREND_LABEL[r.momentum]||'Flat')+':</strong> '+esc(r.momentum_summary)+'</div></div>'+
+    '<div class="dps"><div class="dpst">Stock</div>'+
+      '<div class="dpit">'+esc(r.stock_summary)+'</div>'+
+      (r.stock_skus_at_risk.length?r.stock_skus_at_risk.map(s=>'<div class="dpit alert">'+esc(s)+'</div>').join(''):'<div class="dpit mt">No SKUs flagged.</div>')+
     '</div>'+
-    '<div class="dps"><div class="dpst">Competitors ? '+r.competitor_level.toUpperCase()+'</div>'+
-      (r.competitor_threats.length?r.competitor_threats.map(t=>'<div class="dpit">? '+t+'</div>').join(''):'<div class="dpit mt">None flagged</div>')+
+    '<div class="dps"><div class="dpst">Competition</div>'+
+      (r.competitor_threats.length?r.competitor_threats.map(t=>'<div class="dpit">'+esc(t)+'</div>').join(''):'<div class="dpit mt">No competitor issue flagged.</div>')+
     '</div>'+
-    '<div class="dps"><div class="dpst">Training ? '+r.training_urgency.toUpperCase()+'</div>'+
-      (r.training_gaps.length?r.training_gaps.map(g=>'<div class="dpit">? '+g+'</div>').join(''):'<div class="dpit mt">None flagged</div>')+
+    '<div class="dps"><div class="dpst">Training and relationship</div>'+
+      (r.training_gaps.length?r.training_gaps.map(g=>'<div class="dpit">'+esc(g)+'</div>').join(''):'<div class="dpit mt">No training gap flagged.</div>')+
+      '<div class="dpit">'+esc(r.staff_relationship || 'No staff relationship note recorded.')+'</div>'+
     '</div>';
   document.getElementById('dpa').innerHTML=
-    '<button class="dpbtn pr" onclick="cb(''+name.replace(/'/g,"\'")+'')">? Copy pre-call brief</button>';
+    '<button class="dpbtn pr" onclick="cb(\''+name.replace(/'/g,"\\'")+'\')">Copy pre-call brief</button>';
   document.getElementById('ovl').classList.add('open');
   render();
 }
+
 function cdp(){SS=null;document.getElementById('ovl').classList.remove('open');render();}
 function mc(e){if(e.target===document.getElementById('ovl'))cdp();}
 function cb(name){
   const r=D.find(x=>x.store_name===name);if(!r)return;
-  const t='PRE-CALL BRIEF ? '+name+'\nCM: '+r.cm_name+' ? Last visit: '+(r.days_ago===0?'today':r.days_ago+'d ago')+'\n\nKEY INSIGHT\n'+r.key_insight+'\n\nACTION\n'+r.recommended_action+'\n\nMOMENTUM: '+MI[r.momentum]+' '+r.momentum.toUpperCase()+'\n'+r.momentum_summary+'\n\nSTOCK: '+r.stock_status.toUpperCase()+'\n'+r.stock_summary+(r.stock_skus_at_risk.length?'\nAt risk: '+r.stock_skus_at_risk.join(', '):'')+'\n\nCOMPETITORS: '+r.competitor_level.toUpperCase()+'\n'+(r.competitor_threats.length?r.competitor_threats.join('\n'):'None')+'\n\nTRAINING: '+r.training_urgency.toUpperCase()+'\n'+(r.training_gaps.length?r.training_gaps.join('\n'):'None');
-  navigator.clipboard.writeText(t).then(()=>{const b=document.querySelector('.dpbtn.pr');const o=b.textContent;b.textContent='? Copied!';setTimeout(()=>b.textContent=o,2000);});
+  const t='PRE-CALL BRIEF - '+name+'\nRetailer: '+retailerName(r.store_name)+'\nCM: '+r.cm_name+' ? Last visit: '+(r.days_ago===0?'today':r.days_ago+'d ago')+'\n\nWHAT IS HAPPENING\n'+r.key_insight+'\n\nWHAT TO DO NEXT\n'+r.recommended_action+'\n\nMOMENTUM\n'+(TREND_LABEL[r.momentum]||'Flat').toUpperCase()+': '+r.momentum_summary+'\n\nSTOCK\n'+r.stock_summary+(r.stock_skus_at_risk.length?'\nAt risk: '+r.stock_skus_at_risk.join(', '):'')+'\n\nCOMPETITION\n'+(r.competitor_threats.length?r.competitor_threats.join('\n'):'None')+'\n\nTRAINING\n'+(r.training_gaps.length?r.training_gaps.join('\n'):'None');
+  navigator.clipboard.writeText(t).then(function(){
+    const b=document.querySelector('.dpbtn.pr');if(!b)return;
+    const o=b.textContent;b.textContent='Copied';setTimeout(function(){b.textContent=o;},2000);
+  });
 }
 render();
 </script>
