@@ -150,6 +150,14 @@ function generateWeeklyDigest(storeSummaries, market) {
     });
 
     const data = JSON.parse(response.getContentText());
+    if (data.error) {
+      Logger.log('generateWeeklyDigest Claude API error: ' + JSON.stringify(data.error));
+      return null;
+    }
+    if (!data.content || !data.content[0]) {
+      Logger.log('generateWeeklyDigest unexpected response: ' + response.getContentText().substring(0, 300));
+      return null;
+    }
     return data.content[0].text.trim();
 
   } catch (err) {

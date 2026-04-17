@@ -72,8 +72,6 @@ function doPost(e) {
     const nowSec = Math.floor(Date.now() / 1000);
     if (update.message && update.message.date && (nowSec - update.message.date) > 300) {
       Logger.log('Dropped stale message update ' + update.update_id + ' (' + (nowSec - update.message.date) + 's old)');
-      // Acknowledge any pending callback_query to clear the spinner, then bail.
-      if (update.callback_query) answerCallbackQueryById(update.callback_query.id);
       return ContentService.createTextOutput('OK');
     }
 
@@ -450,10 +448,6 @@ function sendMessageWithButtons(chatId, text, buttons) {
 }
 
 function answerCallbackQuery(callbackQueryId) {
-  answerCallbackQueryById(callbackQueryId);
-}
-
-function answerCallbackQueryById(callbackQueryId) {
   const token = PropertiesService.getScriptProperties().getProperty('TELEGRAM_TOKEN');
   UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
     method: 'post',

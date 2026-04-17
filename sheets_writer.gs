@@ -138,7 +138,6 @@ function getAllLatestAnalyses() {
   const sheet = ss.getSheetByName(SHEETS.ANALYSIS);
   if (!sheet || sheet.getLastRow() < 2) return [];
 
-  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 19).getValues();
   const headers = [
     'store_name', 'country', 'cm_name', 'last_visit', 'days_ago',
     'overall_health', 'stock_status', 'stock_summary', 'stock_skus_at_risk',
@@ -146,6 +145,7 @@ function getAllLatestAnalyses() {
     'training_urgency', 'training_gaps', 'key_insight', 'recommended_action',
     'staff_relationship', 'total_visits'
   ];
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getValues();
 
   return data.map(row => {
     const obj = {};
@@ -177,10 +177,10 @@ function getStoreListForChat(chatId) {
   // so callers can correctly distinguish "no assignment" from "assigned stores".
   if (!sheet || sheet.getLastRow() < 2) return null;
 
-  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
-  // Columns: Telegram Chat ID | CM Name | Store Name
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+  // Columns: Telegram Chat ID | CM Name | Store Name | Country | Active
   const stores = data
-    .filter(row => row[0].toString() === chatId.toString())
+    .filter(row => row[0].toString() === chatId.toString() && row[4].toString().toLowerCase() !== 'no')
     .map(row => row[2])
     .filter(Boolean);
 

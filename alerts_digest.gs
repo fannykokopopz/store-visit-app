@@ -11,14 +11,15 @@ function triggerAtRiskAlert(storeName, cmName, analysis) {
 
   if (!alertChatId) return;
 
+  const threats = Array.isArray(analysis.competitor_threats) ? analysis.competitor_threats : [];
   const msg =
     `🔴 *AT-RISK ALERT*\n\n` +
     `*${storeName}*\n` +
     `CM: ${cmName} · Just logged\n\n` +
     `💡 ${analysis.key_insight}\n\n` +
     `*Action required:* ${analysis.recommended_action}\n\n` +
-    (analysis.competitor_threats.length
-      ? `⚡ *Competitor:* ${analysis.competitor_threats[0]}\n`
+    (threats.length
+      ? `⚡ *Competitor:* ${threats[0]}\n`
       : '') +
     (analysis.stock_status === 'red'
       ? `📦 *Stock critical:* ${analysis.stock_summary}\n`
@@ -58,7 +59,7 @@ function weeklyDigest() {
 
   // Send Telegram summary to AM
   if (alertChatId) {
-    sendWeeklyTelegram(alertChatId, analyses, atRisk, stale, narrative);
+    sendWeeklyTelegram(alertChatId, analyses, atRisk, stale);
   }
 }
 
@@ -140,7 +141,7 @@ function sendWeeklyEmail(email, analyses, atRisk, stale, brightSpots, narrative)
   }
 
   // Footer
-  const dashboardUrl = `https://${PropertiesService.getScriptProperties().getProperty('GITHUB_REPO').split('/')[0]}.github.io/${PropertiesService.getScriptProperties().getProperty('GITHUB_REPO').split('/')[1]}/`;
+  const dashboardUrl = getDashboardUrl();
   body += `<div style="padding:16px 24px;background:#F5F5F7;border-radius:0 0 12px 12px;text-align:center;">
     <a href="${dashboardUrl}" style="font-size:13px;color:#007AFF;text-decoration:none;font-weight:500;">Open full dashboard →</a>
   </div>`;
@@ -151,7 +152,7 @@ function sendWeeklyEmail(email, analyses, atRisk, stale, brightSpots, narrative)
 }
 
 // ── Send weekly Telegram summary to AM ────────────────────────────────────────
-function sendWeeklyTelegram(chatId, analyses, atRisk, stale, narrative) {
+function sendWeeklyTelegram(chatId, analyses, atRisk, stale) {
   const week = getISOWeek(new Date());
   let msg = `📊 *Week ${week} TC Store Visit App — SG*\n\n`;
 
@@ -172,4 +173,15 @@ function sendWeeklyTelegram(chatId, analyses, atRisk, stale, narrative) {
 
   msg += `_Full dashboard in email or tap /mystores_`;
   sendMessage(chatId, msg);
+}
+
+// ── Build GitHub Pages URL from GITHUB_REPO property ─────────────────────────
+function getDashboardUrl() {
+  const repo = PropertiesService.getScriptProperties().getProperty('GITHUB_REPO') || '';
+  const parts = repo.split('/');
+  if (parts.length < 2 || !parts[0] || !parts[1]) {
+    Logger.log('getDashboardUrl: GITHUB_REPO not in expected "owner/repo" format: ' + repo);
+    return '#';
+  }
+  return `https://${parts[0]}.github.io/${parts[1]}/`;
 }

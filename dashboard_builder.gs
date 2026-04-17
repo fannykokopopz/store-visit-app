@@ -277,36 +277,58 @@ function publishToGitHub(html) {
   const token = props.GITHUB_TOKEN;
   const repo = props.GITHUB_REPO; // e.g. "fannykokopopz/store-intel"
 
+  if (!token || !repo) {
+    Logger.log('publishToGitHub: GITHUB_TOKEN or GITHUB_REPO not set — skipping publish');
+    return;
+  }
+
   // Get current file SHA (needed for update)
   let sha = null;
   try {
     const getResponse = UrlFetchApp.fetch(
       `https://api.github.com/repos/${repo}/contents/index.html`,
-      { headers: { 'Authorization': 'token ' + token } }
+      { headers: { 'Authorization': 'token ' + token }, muteHttpExceptions: true }
     );
-    sha = JSON.parse(getResponse.getContentText()).sha;
+    const getStatus = getResponse.getResponseCode();
+    if (getStatus === 200) {
+      sha = JSON.parse(getResponse.getContentText()).sha;
+    } else if (getStatus !== 404) {
+      Logger.log('publishToGitHub: unexpected status getting SHA: ' + getStatus + ' — ' + getResponse.getContentText().substring(0, 200));
+    }
   } catch (e) {
-    // File doesn't exist yet — first publish
+    Logger.log('publishToGitHub: error getting SHA: ' + e.message);
   }
 
   const payload = {
     message: `Dashboard update ${new Date().toISOString()}`,
-    content: Utilities.base64Encode(html),
+    // Encode as UTF-8 bytes so non-ASCII store names survive the base64 round-trip
+    content: Utilities.base64Encode(Utilities.newBlob(html, 'text/html').getBytes()),
     branch: 'main'
   };
   if (sha) payload.sha = sha;
 
-  UrlFetchApp.fetch(
-    `https://api.github.com/repos/${repo}/contents/index.html`,
-    {
-      method: 'put',
-      headers: {
-        'Authorization': 'token ' + token,
-        'Content-Type': 'application/json'
-      },
-      payload: JSON.stringify(payload)
+  try {
+    const putResponse = UrlFetchApp.fetch(
+      `https://api.github.com/repos/${repo}/contents/index.html`,
+      {
+        method: 'put',
+        headers: {
+          'Authorization': 'token ' + token,
+          'Content-Type': 'application/json'
+        },
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true
+      }
+    );
+    const putStatus = putResponse.getResponseCode();
+    if (putStatus !== 200 && putStatus !== 201) {
+      Logger.log('publishToGitHub: GitHub API error ' + putStatus + ': ' + putResponse.getContentText().substring(0, 300));
+    } else {
+      Logger.log('publishToGitHub: success (' + putStatus + ')');
     }
-  );
+  } catch (e) {
+    Logger.log('publishToGitHub: error publishing: ' + e.message);
+  }
 }
 
 // ── ISO week number helper ────────────────────────────────────────────────────
