@@ -6,15 +6,12 @@ import { createVisit, getStoreVisitStats } from '../../db/queries/visits.js';
 import { uploadVisitPhoto } from '../../db/queries/photos.js';
 import {
   getStaffForStore,
-  getAllStaffForStore,
   getActiveTrainingModules,
   addStaffToStore,
   logTraining,
-  updateStaffName,
-  updateStaffType,
-  setStaffActiveAtStore,
   Staff,
 } from '../../db/queries/staff.js';
+import { handleStaffList } from '../shared/staff-management.js';
 import { buildStorePicker } from '../keyboards/store-picker.js';
 import { config } from '../../config.js';
 
@@ -212,7 +209,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       await handleTrainingAddon(conversation, ctx, visit.id, storeId);
       await showAddonMenu(ctx);
     } else if (choice === 'addon:staff') {
-      await handleStaffAddon(conversation, ctx, storeId);
+      await handleStaffList(conversation, ctx, storeId);
       await showAddonMenu(ctx);
     } else if (addonResponse.message?.text === '/cancel') {
       addingMore = false;
@@ -324,140 +321,3 @@ async function handleTrainingAddon(
   }
 }
 
-const STAFF_TYPE_LABELS: Record<string, string> = {
-  staff: 'Staff',
-  other_brand: 'Other Brand',
-  part_timer: 'Part Timer',
-};
-
-async function handleStaffAddon(
-  conversation: VisitConversation,
-  ctx: BotContext,
-  storeId: string,
-): Promise<void> {
-  const staff = await conversation.external(() => getAllStaffForStore(storeId));
-
-  const kb = new InlineKeyboard();
-  for (const s of staff) {
-    const label = s.still_working
-      ? `${s.name} (${STAFF_TYPE_LABELS[s.staff_type]})`
-      : `${s.name} — left`;
-    kb.text(label, `sm:${s.id}`).row();
-  }
-  kb.text('+ Add someone new', 'sm:new').row();
-  kb.text('← Back', 'sm:cancel').row();
-
-  await ctx.reply("Here's who's at this store:", { reply_markup: kb });
-
-  const pick = await conversation.wait();
-  const data = pick.callbackQuery?.data;
-  if (pick.callbackQuery) await pick.answerCallbackQuery();
-
-  if (!data?.startsWith('sm:') || data === 'sm:cancel') return;
-
-  if (data === 'sm:new') {
-    await addNewStaff(conversation, ctx, storeId);
-    return;
-  }
-
-  const staffId = data.replace('sm:', '');
-  const member = staff.find(s => s.id === staffId);
-  if (!member) return;
-
-  await editStaffMember(conversation, ctx, storeId, member);
-}
-
-async function addNewStaff(
-  conversation: VisitConversation,
-  ctx: BotContext,
-  storeId: string,
-): Promise<void> {
-  await ctx.reply("What's their name?");
-  const nameCtx = await conversation.wait();
-  const name = nameCtx.message?.text;
-  if (!name || name === '/cancel') return;
-
-  const typeKb = new InlineKeyboard()
-    .text('Staff', 'stype:staff')
-    .text('Other Brand', 'stype:other_brand')
-    .text('Part Timer', 'stype:part_timer');
-
-  await ctx.reply(`What type is *${name}*?`, {
-    parse_mode: 'Markdown',
-    reply_markup: typeKb,
-  });
-
-  const typeCtx = await conversation.wait();
-  const typeData = typeCtx.callbackQuery?.data;
-  if (typeCtx.callbackQuery) await typeCtx.answerCallbackQuery();
-
-  if (!typeData?.startsWith('stype:')) return;
-  const staffType = typeData.replace('stype:', '') as Staff['staff_type'];
-
-  const added = await conversation.external(() => addStaffToStore(name, storeId, staffType));
-  if (added) {
-    await ctx.reply(`Added ${name} (${STAFF_TYPE_LABELS[staffType]})! 👍`);
-  } else {
-    await ctx.reply("Hmm, couldn't add them. Try again later.");
-  }
-}
-
-async function editStaffMember(
-  conversation: VisitConversation,
-  ctx: BotContext,
-  storeId: string,
-  member: Staff & { still_working: boolean },
-): Promise<void> {
-  const kb = new InlineKeyboard()
-    .text('✏️ Edit name', 'sedit:name').row()
-    .text('🔄 Change type', 'sedit:type').row()
-    .text(member.still_working ? '👋 Mark as left' : '🔙 Mark as still working', 'sedit:active').row()
-    .text('← Back', 'sedit:cancel');
-
-  await ctx.reply(
-    `*${member.name}*\n` +
-    `Type: ${STAFF_TYPE_LABELS[member.staff_type]}\n` +
-    `Status: ${member.still_working ? '✅ Active' : '👋 Left'}\n\n` +
-    `What would you like to change?`,
-    { parse_mode: 'Markdown', reply_markup: kb },
-  );
-
-  const action = await conversation.wait();
-  const choice = action.callbackQuery?.data;
-  if (action.callbackQuery) await action.answerCallbackQuery();
-
-  if (choice === 'sedit:name') {
-    await ctx.reply(`Current name: ${member.name}\nWhat should it be instead?`);
-    const nameCtx = await conversation.wait();
-    const newName = nameCtx.message?.text;
-    if (!newName || newName === '/cancel') return;
-
-    const ok = await conversation.external(() => updateStaffName(member.id, newName));
-    await ctx.reply(ok ? `Done — renamed to ${newName}. ✓` : "Hmm, that didn't work. Try again.");
-  } else if (choice === 'sedit:type') {
-    const typeKb = new InlineKeyboard()
-      .text('Staff', 'stype:staff')
-      .text('Other Brand', 'stype:other_brand')
-      .text('Part Timer', 'stype:part_timer');
-
-    await ctx.reply(`Currently: ${STAFF_TYPE_LABELS[member.staff_type]}\nWhat should it be?`, {
-      reply_markup: typeKb,
-    });
-
-    const typeCtx = await conversation.wait();
-    const typeData = typeCtx.callbackQuery?.data;
-    if (typeCtx.callbackQuery) await typeCtx.answerCallbackQuery();
-
-    if (!typeData?.startsWith('stype:')) return;
-    const newType = typeData.replace('stype:', '') as Staff['staff_type'];
-
-    const ok = await conversation.external(() => updateStaffType(member.id, newType));
-    await ctx.reply(ok ? `Updated to ${STAFF_TYPE_LABELS[newType]}. ✓` : "Hmm, that didn't work. Try again.");
-  } else if (choice === 'sedit:active') {
-    const newActive = !member.still_working;
-    const ok = await conversation.external(() => setStaffActiveAtStore(member.id, storeId, newActive));
-    await ctx.reply(ok
-      ? `Got it — ${member.name} marked as ${newActive ? 'still working ✅' : 'left 👋'}.`
-      : "Hmm, that didn't work. Try again.");
-  }
-}

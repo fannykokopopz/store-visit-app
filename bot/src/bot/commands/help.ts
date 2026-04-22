@@ -5,7 +5,8 @@ export async function handleHelp(ctx: Context): Promise<void> {
     `*Here's what I can do:*\n\n` +
     `/visit — Log a store visit\n` +
     `/editvisit — Edit a recent visit\n` +
-    `/mystores — See your stores at a glance\n` +
+    `/mystores — See your stores + stats\n` +
+    `/staff — Manage all your store staff\n` +
     `/cancel — Cancel what you're doing\n\n` +
     `───────────────\n\n` +
     `📝 *Tips for great store updates*\n\n` +

@@ -114,3 +114,100 @@ export async function setStaffActiveAtStore(staffId: string, storeId: string, ac
     .eq('store_id', storeId);
   return !error;
 }
+
+export interface StaffWithStore extends Staff {
+  store_id: string;
+  store_name: string;
+  still_working: boolean;
+}
+
+export async function getAllStaffForUser(userId: string): Promise<StaffWithStore[]> {
+  const { data, error } = await supabase
+    .from('cm_store_assignments')
+    .select('store_id, stores(name)')
+    .eq('user_id', userId)
+    .eq('is_active', true);
+
+  if (error || !data) return [];
+
+  const storeIds = data.map((r: any) => r.store_id);
+  const storeNames = new Map(data.map((r: any) => [r.store_id, r.stores?.name || 'Unknown']));
+
+  const { data: assignments, error: assErr } = await supabase
+    .from('staff_store_assignments')
+    .select('staff_id, store_id, ended_at, staff(*)')
+    .in('store_id', storeIds);
+
+  if (assErr || !assignments) return [];
+
+  return assignments
+    .map((row: any) => ({
+      ...row.staff,
+      store_id: row.store_id,
+      store_name: storeNames.get(row.store_id) || 'Unknown',
+      still_working: !row.ended_at,
+    } as StaffWithStore))
+    .sort((a, b) => {
+      if (a.still_working !== b.still_working) return a.still_working ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+}
+
+export interface StaffStats {
+  trainingsCompleted: number;
+  lastTrainingDate: string | null;
+  modulesTrainedOn: string[];
+  assignmentHistory: { store_name: string; started_at: string; ended_at: string | null }[];
+}
+
+export async function getStaffStats(staffId: string): Promise<StaffStats> {
+  const [trainingRes, assignmentRes] = await Promise.all([
+    supabase
+      .from('visit_training_logs')
+      .select('created_at, training_modules(name)')
+      .eq('staff_id', staffId)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('staff_store_assignments')
+      .select('store_id, started_at, ended_at, stores(name)')
+      .eq('staff_id', staffId)
+      .order('started_at', { ascending: false }),
+  ]);
+
+  const trainings = trainingRes.data || [];
+  const moduleSet = new Set<string>();
+  for (const t of trainings) {
+    const name = (t as any).training_modules?.name;
+    if (name) moduleSet.add(name);
+  }
+
+  const assignments = (assignmentRes.data || []).map((a: any) => ({
+    store_name: a.stores?.name || 'Unknown',
+    started_at: a.started_at,
+    ended_at: a.ended_at,
+  }));
+
+  return {
+    trainingsCompleted: trainings.length,
+    lastTrainingDate: trainings.length > 0 ? trainings[0].created_at : null,
+    modulesTrainedOn: Array.from(moduleSet),
+    assignmentHistory: assignments,
+  };
+}
+
+export async function transferStaff(staffId: string, fromStoreId: string, toStoreId: string): Promise<boolean> {
+  const { error: endErr } = await supabase
+    .from('staff_store_assignments')
+    .update({ ended_at: new Date().toISOString() })
+    .eq('staff_id', staffId)
+    .eq('store_id', fromStoreId)
+    .is('ended_at', null);
+
+  if (endErr) return false;
+
+  const { error: startErr } = await supabase
+    .from('staff_store_assignments')
+    .insert({ staff_id: staffId, store_id: toStoreId });
+
+  return !startErr;
+}

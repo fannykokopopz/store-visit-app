@@ -4,10 +4,11 @@ import { config } from '../config.js';
 import { BotContext, authMiddleware, requireAuth } from './middleware/auth.js';
 import { handleStart } from './commands/start.js';
 import { handleHelp } from './commands/help.js';
-import { handleMyStores } from './commands/mystores.js';
 import { handleCancel } from './commands/cancel.js';
 import { visitFlow } from './conversations/visit-flow.js';
 import { editVisitFlow } from './conversations/editvisit-flow.js';
+import { myStoresFlow } from './conversations/mystores-flow.js';
+import { staffFlow } from './conversations/staff-flow.js';
 
 export function createBot(): Bot<BotContext> {
   const bot = new Bot<BotContext>(config.telegram.botToken);
@@ -20,11 +21,12 @@ export function createBot(): Bot<BotContext> {
   // Conversations
   bot.use(createConversation(visitFlow));
   bot.use(createConversation(editVisitFlow));
+  bot.use(createConversation(myStoresFlow));
+  bot.use(createConversation(staffFlow));
 
   // Commands
   bot.command('start', handleStart);
   bot.command('help', handleHelp);
-  bot.command('mystores', handleMyStores);
   bot.command('cancel', handleCancel);
   bot.command('visit', async (ctx) => {
     const user = requireAuth(ctx);
@@ -35,6 +37,16 @@ export function createBot(): Bot<BotContext> {
     const user = requireAuth(ctx);
     if (!user) return;
     await ctx.conversation.enter('editVisitFlow');
+  });
+  bot.command('mystores', async (ctx) => {
+    const user = requireAuth(ctx);
+    if (!user) return;
+    await ctx.conversation.enter('myStoresFlow');
+  });
+  bot.command('staff', async (ctx) => {
+    const user = requireAuth(ctx);
+    if (!user) return;
+    await ctx.conversation.enter('staffFlow');
   });
 
   // Error handler
