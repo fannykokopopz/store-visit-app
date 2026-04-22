@@ -4,11 +4,7 @@ export interface VisitInsert {
   store_id: string;
   user_id: string;
   visit_date?: string;
-  relationship_notes?: string | null;
-  training_notes?: string | null;
-  experience_notes?: string | null;
-  creative_notes?: string | null;
-  raw_notes_combined?: string | null;
+  visit_notes?: string | null;
 }
 
 export interface Visit {
@@ -16,10 +12,7 @@ export interface Visit {
   store_id: string;
   user_id: string;
   visit_date: string;
-  relationship_notes: string | null;
-  training_notes: string | null;
-  experience_notes: string | null;
-  creative_notes: string | null;
+  visit_notes: string | null;
   raw_notes_combined: string | null;
   overall_health: string | null;
   momentum: string | null;
@@ -30,16 +23,12 @@ export interface Visit {
 }
 
 export async function createVisit(visit: VisitInsert): Promise<Visit | null> {
-  const combined = [
-    visit.relationship_notes ? `--- RELATIONSHIP ---\n${visit.relationship_notes}` : null,
-    visit.training_notes ? `--- TRAINING ---\n${visit.training_notes}` : null,
-    visit.experience_notes ? `--- EXPERIENCE ---\n${visit.experience_notes}` : null,
-    visit.creative_notes ? `--- CREATIVE METHODS ---\n${visit.creative_notes}` : null,
-  ].filter(Boolean).join('\n\n');
-
   const { data, error } = await supabase
     .from('visits')
-    .insert({ ...visit, raw_notes_combined: combined || null })
+    .insert({
+      ...visit,
+      raw_notes_combined: visit.visit_notes || null,
+    })
     .select()
     .single();
 
@@ -52,30 +41,14 @@ export async function createVisit(visit: VisitInsert): Promise<Visit | null> {
 
 export async function updateVisitNotes(
   visitId: string,
-  updates: Partial<Pick<VisitInsert, 'relationship_notes' | 'training_notes' | 'experience_notes' | 'creative_notes'>>,
+  notes: string,
   editedBy: string,
 ): Promise<Visit | null> {
-  const { data: existing, error: fetchErr } = await supabase
-    .from('visits')
-    .select('relationship_notes, training_notes, experience_notes, creative_notes')
-    .eq('id', visitId)
-    .single();
-
-  if (fetchErr || !existing) return null;
-
-  const merged = { ...existing, ...updates };
-  const combined = [
-    merged.relationship_notes ? `--- RELATIONSHIP ---\n${merged.relationship_notes}` : null,
-    merged.training_notes ? `--- TRAINING ---\n${merged.training_notes}` : null,
-    merged.experience_notes ? `--- EXPERIENCE ---\n${merged.experience_notes}` : null,
-    merged.creative_notes ? `--- CREATIVE METHODS ---\n${merged.creative_notes}` : null,
-  ].filter(Boolean).join('\n\n');
-
   const { data, error } = await supabase
     .from('visits')
     .update({
-      ...updates,
-      raw_notes_combined: combined || null,
+      visit_notes: notes,
+      raw_notes_combined: notes,
       edited_at: new Date().toISOString(),
       edited_by: editedBy,
     })
@@ -90,7 +63,7 @@ export async function updateVisitNotes(
   return data as Visit;
 }
 
-export async function getRecentVisitsByUser(userId: string, limit = 5): Promise<(Visit & { stores: { name: string } })[]> {
+export async function getRecentVisitsByUser(userId: string, limit = 10): Promise<(Visit & { stores: { name: string } })[]> {
   const { data, error } = await supabase
     .from('visits')
     .select('*, stores(name)')
@@ -99,6 +72,31 @@ export async function getRecentVisitsByUser(userId: string, limit = 5): Promise<
     .limit(limit);
 
   if (error || !data) return [];
+  return data as any;
+}
+
+export async function getLastVisitForStore(storeId: string, userId: string): Promise<Visit | null> {
+  const { data, error } = await supabase
+    .from('visits')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('user_id', userId)
+    .order('visit_date', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error || !data) return null;
+  return data as Visit;
+}
+
+export async function getVisitById(visitId: string): Promise<(Visit & { stores: { name: string } }) | null> {
+  const { data, error } = await supabase
+    .from('visits')
+    .select('*, stores(name)')
+    .eq('id', visitId)
+    .single();
+
+  if (error || !data) return null;
   return data as any;
 }
 

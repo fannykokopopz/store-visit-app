@@ -10,11 +10,9 @@ export type BotContext = ConversationFlavor<BaseContext>;
 
 export async function authMiddleware(ctx: BotContext, next: NextFunction): Promise<void> {
   const chatId = ctx.from?.id;
-  console.log('[auth] from.id:', chatId);
   if (!chatId) return;
 
   const user = await getUserByTelegramId(chatId);
-  console.log('[auth] user lookup result:', user ? user.full_name : 'NOT FOUND');
   if (user) {
     ctx.user = user;
   }

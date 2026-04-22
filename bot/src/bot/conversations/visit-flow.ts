@@ -2,13 +2,30 @@ import { Conversation } from '@grammyjs/conversations';
 import { InlineKeyboard } from 'grammy';
 import { BotContext } from '../middleware/auth.js';
 import { getStoresForUser, Store } from '../../db/queries/stores.js';
-import { createVisit } from '../../db/queries/visits.js';
+import { createVisit, getLastVisitForStore } from '../../db/queries/visits.js';
 import { uploadVisitPhoto } from '../../db/queries/photos.js';
+import {
+  getStaffForStore,
+  getActiveTrainingModules,
+  addStaffToStore,
+  logTraining,
+  logAlly,
+  Staff,
+} from '../../db/queries/staff.js';
 import { buildStorePicker } from '../keyboards/store-picker.js';
-import { categoriesFilled } from '../../utils/format.js';
+import { daysSinceLabel } from '../../utils/format.js';
 import { config } from '../../config.js';
 
 type VisitConversation = Conversation<BotContext, BotContext>;
+
+const VISIT_TEMPLATE =
+  `Copy and fill in your store update:\n\n` +
+  `1️⃣ Good News\n\n` +
+  `2️⃣ Competitors' Insights\n\n` +
+  `3️⃣ Display & Stock\n\n` +
+  `4️⃣ What to Follow Up\n\n` +
+  `5️⃣ Buzz Plan\n\n` +
+  `Skip any section that doesn't apply. Send photos with your message if you have them.`;
 
 export async function visitFlow(conversation: VisitConversation, ctx: BotContext): Promise<void> {
   const chatId = ctx.from?.id;
@@ -51,82 +68,85 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   }
 
   await storeCallback.answerCallbackQuery();
-  await ctx.reply(
-    `Got it — *${store.name}*\n\n` +
-    `Let's walk through your visit. Type naturally for each section.\n` +
-    `Use the Skip button if a category doesn't apply.`,
-    { parse_mode: 'Markdown' },
-  );
 
-  // Step 2-5: Collect R/T/E/C notes
-  const relationshipNotes = await collectCategory(
-    conversation, ctx,
-    '👥 *RELATIONSHIP*\nHow many staff did you engage? Any key insights from conversations?',
-  );
+  // Step 2: Show last visit context + template
+  const lastVisit = await conversation.external(() => getLastVisitForStore(storeId, user.id));
 
-  const trainingNotes = await collectCategory(
-    conversation, ctx,
-    '🎓 *TRAINING*\nWho did you train? What products? Any ally-ready staff?',
-  );
+  let contextMsg = `*${store.name}*\n\n`;
+  if (lastVisit) {
+    const snippet = (lastVisit.visit_notes || lastVisit.raw_notes_combined || '').slice(0, 200);
+    contextMsg += `📋 Last visit: ${daysSinceLabel(lastVisit.visit_date)}\n`;
+    if (snippet) contextMsg += `_${snippet}${snippet.length >= 200 ? '...' : ''}_\n\n`;
+    else contextMsg += '\n';
+  } else {
+    contextMsg += `No previous visits on record.\n\n`;
+  }
 
-  const experienceNotes = await collectCategory(
-    conversation, ctx,
-    '🏪 *EXPERIENCE*\nHow\'s the display? Demo units working? Any space gained or lost?',
-  );
+  await ctx.reply(contextMsg + VISIT_TEMPLATE, { parse_mode: 'Markdown' });
 
-  const creativeNotes = await collectCategory(
-    conversation, ctx,
-    '💡 *CREATIVE METHODS*\nAny innovative tactics you tried?',
-  );
-
-  // Step 6: Photos
-  await ctx.reply(
-    '📸 *PHOTOS*\nSend photos now (display, demo, shelf), or tap Done.',
-    {
-      parse_mode: 'Markdown',
-      reply_markup: new InlineKeyboard().text('Done — no photos', 'photos:done'),
-    },
-  );
-
+  // Step 3: Collect notes + photos
   const photoFileIds: string[] = [];
-  let collectingPhotos = true;
+  let visitNotes = '';
+  let collecting = true;
 
-  while (collectingPhotos) {
-    const photoCtx = await conversation.wait();
+  while (collecting) {
+    const response = await conversation.wait();
 
-    if (photoCtx.callbackQuery?.data === 'photos:done') {
-      await photoCtx.answerCallbackQuery();
-      collectingPhotos = false;
-    } else if (photoCtx.message?.photo) {
-      const photos = photoCtx.message.photo;
+    if (response.message?.text === '/cancel') {
+      await ctx.reply('Visit cancelled.');
+      return;
+    }
+
+    if (response.message?.text) {
+      visitNotes += (visitNotes ? '\n\n' : '') + response.message.text;
+      await ctx.reply(
+        `Got your update. Send photos now, or tap *Done* to save.`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: new InlineKeyboard().text('Done — save visit', 'visit:done'),
+        },
+      );
+    } else if (response.message?.photo) {
+      const photos = response.message.photo;
       const largest = photos[photos.length - 1];
       photoFileIds.push(largest.file_id);
 
-      await photoCtx.reply(
-        `${photoFileIds.length} photo(s) received. Send more or tap Done.`,
+      if (response.message.caption && !visitNotes) {
+        visitNotes = response.message.caption;
+      } else if (response.message.caption) {
+        visitNotes += '\n\n' + response.message.caption;
+      }
+
+      await ctx.reply(
+        `${photoFileIds.length} photo(s) received. Send more, or tap *Done*.`,
         {
-          reply_markup: new InlineKeyboard().text('Done', 'photos:done'),
+          parse_mode: 'Markdown',
+          reply_markup: new InlineKeyboard().text('Done — save visit', 'visit:done'),
         },
       );
-    } else if (photoCtx.message?.text === '/cancel') {
-      await ctx.reply('Visit cancelled.');
-      return;
+    } else if (response.callbackQuery?.data === 'visit:done') {
+      await response.answerCallbackQuery();
+      collecting = false;
     } else {
-      await photoCtx.reply('Send a photo, or tap Done to continue.');
+      await ctx.reply('Send your update as text or photos. Tap Done when finished.', {
+        reply_markup: new InlineKeyboard().text('Done — save visit', 'visit:done'),
+      });
     }
   }
 
-  // Step 7: Save to Supabase
+  if (!visitNotes && photoFileIds.length === 0) {
+    await ctx.reply('No update provided. Visit not saved. Use /visit to try again.');
+    return;
+  }
+
+  // Step 4: Save visit
   await ctx.reply('Saving your visit...');
 
   const visit = await conversation.external(() =>
     createVisit({
       store_id: storeId,
       user_id: user.id,
-      relationship_notes: relationshipNotes,
-      training_notes: trainingNotes,
-      experience_notes: experienceNotes,
-      creative_notes: creativeNotes,
+      visit_notes: visitNotes || null,
     }),
   );
 
@@ -142,8 +162,8 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       try {
         const file = await ctx.api.getFile(fileId);
         const fileUrl = `https://api.telegram.org/file/bot${config.telegram.botToken}/${file.file_path}`;
-        const response = await fetch(fileUrl);
-        const buffer = Buffer.from(await response.arrayBuffer());
+        const res = await fetch(fileUrl);
+        const buffer = Buffer.from(await res.arrayBuffer());
         const fileName = `${crypto.randomUUID()}.jpg`;
 
         await conversation.external(() =>
@@ -155,58 +175,181 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       }
     }
     if (uploaded < photoFileIds.length) {
-      await ctx.reply(`⚠️ ${uploaded}/${photoFileIds.length} photos uploaded. Some failed — you can add them later with /editvisit.`);
+      await ctx.reply(`${uploaded}/${photoFileIds.length} photos uploaded. Some failed.`);
     }
   }
 
-  // Step 8: Confirmation
-  const cats = categoriesFilled({
-    relationship_notes: relationshipNotes,
-    training_notes: trainingNotes,
-    experience_notes: experienceNotes,
-    creative_notes: creativeNotes,
-  });
+  // Step 5: Confirmation + optional add-ons
+  await ctx.reply(
+    `✅ *Visit logged — ${store.name}*\n` +
+    `📅 ${new Date().toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}\n` +
+    (visitNotes ? '📝 Notes saved\n' : '') +
+    (photoFileIds.length > 0 ? `📸 ${photoFileIds.length} photo(s)\n` : '') +
+    `\nWant to update anything else?`,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: new InlineKeyboard()
+        .text('Log training', 'addon:training').row()
+        .text('Log ally', 'addon:ally').row()
+        .text('Done', 'addon:done'),
+    },
+  );
 
-  let confirmation =
-    `✅ *VISIT LOGGED — ${store.name}*\n` +
-    `📅 ${new Date().toLocaleDateString('en-GB')}\n` +
-    `📝 Categories: ${cats.length > 0 ? cats.join(' / ') : 'none'}\n` +
-    `📸 Photos: ${photoFileIds.length}`;
+  // Step 6: Optional add-on loop
+  let addingMore = true;
+  while (addingMore) {
+    const addonCtx = await conversation.waitForCallbackQuery(/^addon:/);
+    const choice = addonCtx.callbackQuery.data;
+    await addonCtx.answerCallbackQuery();
 
-  if (config.anthropic.apiKey) {
-    // TODO Phase 5: Run Claude analysis and show health/momentum summary
-    confirmation += '\n\n🤖 AI analysis will be available once connected.';
+    if (choice === 'addon:done') {
+      addingMore = false;
+    } else if (choice === 'addon:training') {
+      await handleTrainingAddon(conversation, ctx, visit.id, storeId);
+      await showAddonMenu(ctx);
+    } else if (choice === 'addon:ally') {
+      await handleAllyAddon(conversation, ctx, visit.id, storeId, user.id);
+      await showAddonMenu(ctx);
+    }
   }
 
-  confirmation += '\n\nUse /editvisit to make changes.';
-
-  await ctx.reply(confirmation, { parse_mode: 'Markdown' });
+  await ctx.reply('All done! Use /editvisit to make changes later.');
 }
 
-async function collectCategory(
+async function showAddonMenu(ctx: BotContext): Promise<void> {
+  await ctx.reply('Anything else?', {
+    reply_markup: new InlineKeyboard()
+      .text('Log training', 'addon:training').row()
+      .text('Log ally', 'addon:ally').row()
+      .text('Done', 'addon:done'),
+  });
+}
+
+async function handleTrainingAddon(
   conversation: VisitConversation,
   ctx: BotContext,
-  prompt: string,
-): Promise<string | null> {
-  await ctx.reply(prompt, {
+  visitId: string,
+  storeId: string,
+): Promise<void> {
+  const staff = await conversation.external(() => getStaffForStore(storeId));
+  const modules = await conversation.external(() => getActiveTrainingModules());
+
+  if (modules.length === 0) {
+    await ctx.reply('No training modules configured.');
+    return;
+  }
+
+  // Pick staff
+  const staffKb = new InlineKeyboard();
+  for (const s of staff) {
+    staffKb.text(s.name, `tstaff:${s.id}`).row();
+  }
+  staffKb.text('+ Add new staff', 'tstaff:new').row();
+  staffKb.text('Cancel', 'tstaff:cancel').row();
+
+  await ctx.reply('Who did you train?', { reply_markup: staffKb });
+
+  const staffPick = await conversation.waitForCallbackQuery(/^tstaff:/);
+  await staffPick.answerCallbackQuery();
+
+  if (staffPick.callbackQuery.data === 'tstaff:cancel') return;
+
+  let selectedStaff: Staff | null = null;
+
+  if (staffPick.callbackQuery.data === 'tstaff:new') {
+    await ctx.reply("Type the staff member's name:");
+    const nameCtx = await conversation.wait();
+    const name = nameCtx.message?.text;
+    if (!name || name === '/cancel') return;
+
+    selectedStaff = await conversation.external(() => addStaffToStore(name, storeId));
+    if (!selectedStaff) {
+      await ctx.reply('Failed to add staff member.');
+      return;
+    }
+    await ctx.reply(`Added ${name}.`);
+  } else {
+    const staffId = staffPick.callbackQuery.data!.replace('tstaff:', '');
+    selectedStaff = staff.find(s => s.id === staffId) || null;
+  }
+
+  if (!selectedStaff) return;
+
+  // Pick module(s)
+  const moduleKb = new InlineKeyboard();
+  for (const m of modules) {
+    moduleKb.text(m.name, `tmod:${m.id}`).row();
+  }
+  moduleKb.text('Done', 'tmod:done').row();
+
+  await ctx.reply(`What did you train *${selectedStaff.name}* on? Tap each module, then Done.`, {
     parse_mode: 'Markdown',
-    reply_markup: new InlineKeyboard().text('Skip', 'category:skip'),
+    reply_markup: moduleKb,
   });
 
-  const response = await conversation.wait();
+  const loggedModules: string[] = [];
+  let pickingModules = true;
 
-  if (response.callbackQuery?.data === 'category:skip') {
-    await response.answerCallbackQuery('Skipped');
-    return null;
+  while (pickingModules) {
+    const modPick = await conversation.waitForCallbackQuery(/^tmod:/);
+    await modPick.answerCallbackQuery();
+
+    if (modPick.callbackQuery.data === 'tmod:done') {
+      pickingModules = false;
+    } else {
+      const moduleId = modPick.callbackQuery.data!.replace('tmod:', '');
+      const mod = modules.find(m => m.id === moduleId);
+      if (mod && !loggedModules.includes(moduleId)) {
+        await conversation.external(() => logTraining(visitId, selectedStaff!.id, moduleId));
+        loggedModules.push(moduleId);
+        await ctx.reply(`Logged: ${selectedStaff!.name} → ${mod.name}. Tap more or Done.`, {
+          reply_markup: moduleKb,
+        });
+      }
+    }
   }
 
-  if (response.message?.text === '/cancel') {
-    throw new Error('CANCELLED');
+  if (loggedModules.length > 0) {
+    await ctx.reply(`Training logged for ${selectedStaff.name} (${loggedModules.length} module(s)).`);
+  }
+}
+
+async function handleAllyAddon(
+  conversation: VisitConversation,
+  ctx: BotContext,
+  visitId: string,
+  storeId: string,
+  cmId: string,
+): Promise<void> {
+  const staff = await conversation.external(() => getStaffForStore(storeId));
+
+  if (staff.length === 0) {
+    await ctx.reply('No staff on record for this store. Add them first via training log.');
+    return;
   }
 
-  if (response.message?.text) {
-    return response.message.text;
+  const kb = new InlineKeyboard();
+  for (const s of staff) {
+    kb.text(s.name, `ally:${s.id}`).row();
   }
+  kb.text('Cancel', 'ally:cancel').row();
 
-  return null;
+  await ctx.reply('Which staff member qualified as an ally?', { reply_markup: kb });
+
+  const pick = await conversation.waitForCallbackQuery(/^ally:/);
+  await pick.answerCallbackQuery();
+
+  if (pick.callbackQuery.data === 'ally:cancel') return;
+
+  const staffId = pick.callbackQuery.data!.replace('ally:', '');
+  const member = staff.find(s => s.id === staffId);
+  if (!member) return;
+
+  const success = await conversation.external(() => logAlly(visitId, staffId, cmId));
+
+  if (success) {
+    await ctx.reply(`${member.name} marked as ally this quarter.`);
+  } else {
+    await ctx.reply('Failed to log ally. Try again.');
+  }
 }

@@ -7,6 +7,7 @@ import { handleHelp } from './commands/help.js';
 import { handleMyStores } from './commands/mystores.js';
 import { handleCancel } from './commands/cancel.js';
 import { visitFlow } from './conversations/visit-flow.js';
+import { editVisitFlow } from './conversations/editvisit-flow.js';
 
 export function createBot(): Bot<BotContext> {
   const bot = new Bot<BotContext>(config.telegram.botToken);
@@ -18,6 +19,7 @@ export function createBot(): Bot<BotContext> {
 
   // Conversations
   bot.use(createConversation(visitFlow));
+  bot.use(createConversation(editVisitFlow));
 
   // Commands
   bot.command('start', handleStart);
@@ -28,6 +30,11 @@ export function createBot(): Bot<BotContext> {
     const user = requireAuth(ctx);
     if (!user) return;
     await ctx.conversation.enter('visitFlow');
+  });
+  bot.command('editvisit', async (ctx) => {
+    const user = requireAuth(ctx);
+    if (!user) return;
+    await ctx.conversation.enter('editVisitFlow');
   });
 
   // Error handler
