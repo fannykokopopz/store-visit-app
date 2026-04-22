@@ -76,14 +76,17 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   await ctx.reply(contextMsg, { parse_mode: 'Markdown' });
 
   await ctx.reply(
+    '```\n' +
     `1️⃣ Good News\n\n\n` +
     `2️⃣ Competitors' Insights\n\n\n` +
     `3️⃣ Display & Stock\n\n\n` +
     `4️⃣ What to Follow Up\n\n\n` +
-    `5️⃣ Buzz Plan`,
+    `5️⃣ Buzz Plan\n` +
+    '```',
+    { parse_mode: 'Markdown' },
   );
 
-  await ctx.reply("Copy the template above and fill it in — skip anything that doesn't apply. You can send photos anytime too, before or after your notes.");
+  await ctx.reply("Tap the template above to copy, then fill it in — skip anything that doesn't apply. You can send photos anytime too, before or after your notes.");
 
   // Step 3: Collect notes + photos
   const photoFileIds: string[] = [];
@@ -141,7 +144,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   }
 
   // Step 4: Save visit
-  await ctx.reply('Saving everything... ⏳');
+  const savingMsg = await ctx.reply('Saving everything... ⏳');
 
   const visit = await conversation.external(() =>
     createVisit({
@@ -152,13 +155,18 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   );
 
   if (!visit) {
-    await ctx.reply("Something went wrong on my end. Try /visit again — sorry about that!");
+    await ctx.api.editMessageText(
+      savingMsg.chat.id,
+      savingMsg.message_id,
+      "Something went wrong on my end. Try /visit again — sorry about that!",
+    );
     return;
   }
 
   // Upload photos
+  let uploaded = photoFileIds.length;
   if (photoFileIds.length > 0) {
-    let uploaded = 0;
+    uploaded = 0;
     for (const fileId of photoFileIds) {
       try {
         const file = await ctx.api.getFile(fileId);
@@ -175,18 +183,24 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
         console.error('Photo upload failed:', err);
       }
     }
-    if (uploaded < photoFileIds.length) {
-      await ctx.reply(`Heads up — only ${uploaded}/${photoFileIds.length} photos made it through. The rest had issues.`);
-    }
   }
 
-  // Step 5: Confirmation + optional add-ons
-  await ctx.reply(
+  // Step 5: Confirmation + optional add-ons (edit the "Saving..." message in place)
+  const photoLine =
+    photoFileIds.length === 0
+      ? ''
+      : uploaded === photoFileIds.length
+        ? `📸 ${photoFileIds.length} photo(s)\n`
+        : `📸 ${uploaded}/${photoFileIds.length} photo(s) — the rest had issues\n`;
+
+  await ctx.api.editMessageText(
+    savingMsg.chat.id,
+    savingMsg.message_id,
     `✅ *Visit logged — ${store.name}*\n` +
-    `📅 ${new Date().toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}\n` +
-    (visitNotes ? '📝 Notes saved\n' : '') +
-    (photoFileIds.length > 0 ? `📸 ${photoFileIds.length} photo(s)\n` : '') +
-    `\nAnything else while you're here?`,
+      `📅 ${new Date().toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}\n` +
+      (visitNotes ? '📝 Notes saved\n' : '') +
+      photoLine +
+      `\nAnything else while you're here?`,
     {
       parse_mode: 'Markdown',
       reply_markup: new InlineKeyboard()

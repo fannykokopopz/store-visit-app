@@ -1,4 +1,5 @@
 import { Conversation } from '@grammyjs/conversations';
+import { InlineKeyboard } from 'grammy';
 import { BotContext } from '../middleware/auth.js';
 import { getStoresForUser, Store } from '../../db/queries/stores.js';
 import { getStoreVisitStats } from '../../db/queries/visits.js';
@@ -143,24 +144,20 @@ async function showStoreDetail(
     `📅 Last visit: ${daysLabel}\n` +
     `🔄 ${stats.visitsThisMonth} visit${stats.visitsThisMonth === 1 ? '' : 's'} this month\n` +
     `👥 ${stats.staffCount} staff on record\n` +
-    `📋 ${stats.trainingsThisQuarter} training${stats.trainingsThisQuarter === 1 ? '' : 's'} this quarter\n\n` +
-    `Type *staff* to see the staff list, or /cancel to go back.`;
+    `📋 ${stats.trainingsThisQuarter} training${stats.trainingsThisQuarter === 1 ? '' : 's'} this quarter`;
 
-  await ctx.reply(msg, { parse_mode: 'Markdown' });
+  await ctx.reply(msg, {
+    parse_mode: 'Markdown',
+    reply_markup: new InlineKeyboard()
+      .text('👥 View staff list', 'storedetail:staff').row()
+      .text('← Back', 'storedetail:back'),
+  });
 
   const response = await conversation.wait();
-  const text = response.message?.text?.trim()?.toLowerCase();
+  const data = response.callbackQuery?.data;
+  if (response.callbackQuery) await response.answerCallbackQuery();
 
-  if (!text || text === '/cancel') return;
-
-  if (text === 'staff') {
+  if (data === 'storedetail:staff') {
     await handleStaffList(conversation, ctx, store.id);
-  } else {
-    await ctx.reply('Type *staff* to see the staff list, or /cancel to go back.', { parse_mode: 'Markdown' });
-    const retry = await conversation.wait();
-    const retryText = retry.message?.text?.trim()?.toLowerCase();
-    if (retryText === 'staff') {
-      await handleStaffList(conversation, ctx, store.id);
-    }
   }
 }
