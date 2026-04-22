@@ -79,10 +79,10 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   await ctx.reply(contextMsg, { parse_mode: 'Markdown' });
 
   await ctx.reply(
-    `1️⃣ Good News\n\n` +
-    `2️⃣ Competitors' Insights\n\n` +
-    `3️⃣ Display & Stock\n\n` +
-    `4️⃣ What to Follow Up\n\n` +
+    `1️⃣ Good News\n\n\n` +
+    `2️⃣ Competitors' Insights\n\n\n` +
+    `3️⃣ Display & Stock\n\n\n` +
+    `4️⃣ What to Follow Up\n\n\n` +
     `5️⃣ Buzz Plan`,
   );
 
