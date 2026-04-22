@@ -82,7 +82,17 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     contextMsg += `No previous visits on record.\n\n`;
   }
 
-  await ctx.reply(contextMsg + VISIT_TEMPLATE, { parse_mode: 'Markdown' });
+  await ctx.reply(contextMsg, { parse_mode: 'Markdown' });
+
+  await ctx.reply(
+    `1️⃣ Good News\n\n` +
+    `2️⃣ Competitors' Insights\n\n` +
+    `3️⃣ Display & Stock\n\n` +
+    `4️⃣ What to Follow Up\n\n` +
+    `5️⃣ Buzz Plan`,
+  );
+
+  await ctx.reply('Copy the template above, fill it in, and send. Add photos too if you have them.');
 
   // Step 3: Collect notes + photos
   const photoFileIds: string[] = [];
@@ -195,12 +205,12 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     },
   );
 
-  // Step 6: Optional add-on loop
+  // Step 6: Optional add-on loop (uses wait() to handle any input gracefully)
   let addingMore = true;
   while (addingMore) {
-    const addonCtx = await conversation.waitForCallbackQuery(/^addon:/);
-    const choice = addonCtx.callbackQuery.data;
-    await addonCtx.answerCallbackQuery();
+    const addonResponse = await conversation.wait();
+    const choice = addonResponse.callbackQuery?.data;
+    if (addonResponse.callbackQuery) await addonResponse.answerCallbackQuery();
 
     if (choice === 'addon:done') {
       addingMore = false;
@@ -209,6 +219,10 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       await showAddonMenu(ctx);
     } else if (choice === 'addon:ally') {
       await handleAllyAddon(conversation, ctx, visit.id, storeId, user.id);
+      await showAddonMenu(ctx);
+    } else if (addonResponse.message?.text === '/cancel') {
+      addingMore = false;
+    } else {
       await showAddonMenu(ctx);
     }
   }
@@ -245,18 +259,19 @@ async function handleTrainingAddon(
     staffKb.text(s.name, `tstaff:${s.id}`).row();
   }
   staffKb.text('+ Add new staff', 'tstaff:new').row();
-  staffKb.text('Cancel', 'tstaff:cancel').row();
+  staffKb.text('Back', 'tstaff:cancel').row();
 
   await ctx.reply('Who did you train?', { reply_markup: staffKb });
 
-  const staffPick = await conversation.waitForCallbackQuery(/^tstaff:/);
-  await staffPick.answerCallbackQuery();
+  const staffResponse = await conversation.wait();
+  const staffData = staffResponse.callbackQuery?.data;
+  if (staffResponse.callbackQuery) await staffResponse.answerCallbackQuery();
 
-  if (staffPick.callbackQuery.data === 'tstaff:cancel') return;
+  if (!staffData?.startsWith('tstaff:') || staffData === 'tstaff:cancel') return;
 
   let selectedStaff: Staff | null = null;
 
-  if (staffPick.callbackQuery.data === 'tstaff:new') {
+  if (staffData === 'tstaff:new') {
     await ctx.reply("Type the staff member's name:");
     const nameCtx = await conversation.wait();
     const name = nameCtx.message?.text;
@@ -269,7 +284,7 @@ async function handleTrainingAddon(
     }
     await ctx.reply(`Added ${name}.`);
   } else {
-    const staffId = staffPick.callbackQuery.data!.replace('tstaff:', '');
+    const staffId = staffData.replace('tstaff:', '');
     selectedStaff = staff.find(s => s.id === staffId) || null;
   }
 
@@ -291,13 +306,14 @@ async function handleTrainingAddon(
   let pickingModules = true;
 
   while (pickingModules) {
-    const modPick = await conversation.waitForCallbackQuery(/^tmod:/);
-    await modPick.answerCallbackQuery();
+    const modResponse = await conversation.wait();
+    const modData = modResponse.callbackQuery?.data;
+    if (modResponse.callbackQuery) await modResponse.answerCallbackQuery();
 
-    if (modPick.callbackQuery.data === 'tmod:done') {
+    if (!modData?.startsWith('tmod:') || modData === 'tmod:done') {
       pickingModules = false;
     } else {
-      const moduleId = modPick.callbackQuery.data!.replace('tmod:', '');
+      const moduleId = modData.replace('tmod:', '');
       const mod = modules.find(m => m.id === moduleId);
       if (mod && !loggedModules.includes(moduleId)) {
         await conversation.external(() => logTraining(visitId, selectedStaff!.id, moduleId));
@@ -332,16 +348,17 @@ async function handleAllyAddon(
   for (const s of staff) {
     kb.text(s.name, `ally:${s.id}`).row();
   }
-  kb.text('Cancel', 'ally:cancel').row();
+  kb.text('Back', 'ally:cancel').row();
 
   await ctx.reply('Which staff member qualified as an ally?', { reply_markup: kb });
 
-  const pick = await conversation.waitForCallbackQuery(/^ally:/);
-  await pick.answerCallbackQuery();
+  const response = await conversation.wait();
+  const data = response.callbackQuery?.data;
+  if (response.callbackQuery) await response.answerCallbackQuery();
 
-  if (pick.callbackQuery.data === 'ally:cancel') return;
+  if (!data?.startsWith('ally:') || data === 'ally:cancel') return;
 
-  const staffId = pick.callbackQuery.data!.replace('ally:', '');
+  const staffId = data.replace('ally:', '');
   const member = staff.find(s => s.id === staffId);
   if (!member) return;
 
