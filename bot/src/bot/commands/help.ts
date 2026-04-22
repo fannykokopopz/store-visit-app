@@ -2,6 +2,12 @@ import { Context } from 'grammy';
 
 export async function handleHelp(ctx: Context): Promise<void> {
   await ctx.reply(
+    `*Here's what I can do:*\n\n` +
+    `/visit — Log a store visit\n` +
+    `/editvisit — Edit a recent visit\n` +
+    `/mystores — See your stores at a glance\n` +
+    `/cancel — Cancel what you're doing\n\n` +
+    `───────────────\n\n` +
     `📝 *Tips for great store updates*\n\n` +
     `When you /visit, you'll get a 5-section template. Here's what works well in each:\n\n` +
     `*1️⃣ Good News*\n` +
