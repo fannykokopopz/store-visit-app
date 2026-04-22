@@ -43,8 +43,8 @@ export function createBot(): Bot<BotContext> {
     console.error(`Error while handling update ${ctx.update.update_id}:`, err.error);
 
     const message = err.error instanceof Error && err.error.message === 'CANCELLED'
-      ? 'Action cancelled.'
-      : 'Something went wrong. Try again or type /cancel to reset.';
+      ? 'No worries, cancelled!'
+      : "Oops, something went wrong on my end. Try again or type /cancel to start fresh.";
 
     ctx.reply(message).catch(console.error);
   });

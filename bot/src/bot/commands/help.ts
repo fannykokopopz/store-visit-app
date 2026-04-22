@@ -2,21 +2,24 @@ import { Context } from 'grammy';
 
 export async function handleHelp(ctx: Context): Promise<void> {
   await ctx.reply(
-    `📝 *How to write good visit notes*\n\n` +
-    `The bot walks you through 4 categories. Here's what to include:\n\n` +
-    `*Relationship (R)*\n` +
-    `How many staff you spoke to, names if possible, key insights from conversations.\n` +
-    `Example: "Spoke to James and Li Wei. James mentioned Bose promoter was in yesterday doing demos."\n\n` +
-    `*Training (T)*\n` +
-    `Who you trained, what products, whether they're ready for ally status.\n` +
-    `Example: "Trained Li Wei on Arc Ultra and Trueplay. He's confident — ally-ready."\n\n` +
-    `*Experience (E)*\n` +
-    `Display quality, demo unit status, space gained or lost.\n` +
-    `Example: "Era 300 demo cracked, needs replacement. Bose took our end-cap."\n\n` +
-    `*Creative Methods (C)*\n` +
-    `Any innovative tactics you tried — skip if nothing special.\n` +
-    `Example: "Offered the team a dinner challenge if they hit 10K this month."\n\n` +
-    `💡 *Tip:* Be specific. Names, product models, and numbers make your notes way more useful.`,
+    `📝 *Tips for great store updates*\n\n` +
+    `When you /visit, you'll get a 5-section template. Here's what works well in each:\n\n` +
+    `*1️⃣ Good News*\n` +
+    `Wins, positive feedback, strong sales moments.\n` +
+    `_"Sold 3x Era 300 this week — staff are pitching it confidently now."_\n\n` +
+    `*2️⃣ Competitors' Insights*\n` +
+    `What other brands are doing — promos, new displays, staffing.\n` +
+    `_"Bose running 20% off on their portable range this month."_\n\n` +
+    `*3️⃣ Display & Stock*\n` +
+    `How the display looks, stock issues, demo unit status.\n` +
+    `_"Era 300 demo has no power — needs a cable. Stock low on Move 2."_\n\n` +
+    `*4️⃣ What to Follow Up*\n` +
+    `Anything that needs action before your next visit.\n` +
+    `_"Need to bring replacement POS materials next week."_\n\n` +
+    `*5️⃣ Buzz Plan*\n` +
+    `Upcoming training plans, events, or store activations.\n` +
+    `_"Planning a lunch demo session for staff next Friday."_\n\n` +
+    `💡 *Pro tip:* Be specific! Names, product models, and numbers make your notes way more useful for everyone.`,
     { parse_mode: 'Markdown' },
   );
 }

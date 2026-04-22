@@ -23,7 +23,7 @@ export async function authMiddleware(ctx: BotContext, next: NextFunction): Promi
 export function requireAuth(ctx: BotContext): User | null {
   if (!ctx.user) {
     ctx.reply(
-      "I don't recognise your account. Please contact your manager to get set up.",
+      "Hmm, I don't have you in the system yet. Check with your manager to get set up!",
     );
     return null;
   }

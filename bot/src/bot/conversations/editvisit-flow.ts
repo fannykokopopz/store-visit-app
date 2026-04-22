@@ -17,93 +17,107 @@ export async function editVisitFlow(conversation: EditConversation, ctx: BotCont
   });
 
   if (!user) {
-    await ctx.reply("You're not registered. Contact your manager to get set up.");
+    await ctx.reply("Hmm, I don't have you in the system yet. Check with your manager to get set up!");
     return;
   }
 
-  // Show recent visits
-  const visits = await conversation.external(() => getRecentVisitsByUser(user.id, 7));
+  // Show recent visits as numbered list
+  const visits = await conversation.external(() => getRecentVisitsByUser(user.id, 10));
 
   if (visits.length === 0) {
-    await ctx.reply('No recent visits to edit. Use /visit to log one first.');
+    await ctx.reply("You don't have any recent visits to edit. Log one first with /visit!");
     return;
   }
 
-  const kb = new InlineKeyboard();
-  for (const v of visits) {
+  let listMsg = '📋 *Your recent visits:*\n\n';
+  for (let i = 0; i < visits.length; i++) {
+    const v = visits[i];
     const storeName = (v as any).stores?.name || 'Unknown store';
     const date = new Date(v.visit_date).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
-    kb.text(`${storeName} — ${date}`, `ev:${v.id}`).row();
+    const hasNotes = v.visit_notes || v.raw_notes_combined;
+    listMsg += `*${i + 1}.* ${storeName} — ${date}${hasNotes ? '' : ' _(no notes)_'}\n`;
   }
-  kb.text('Cancel', 'ev:cancel').row();
+  listMsg += '\nType a number to pick one (e.g. *1*), or /cancel to go back.';
 
-  await ctx.reply('Which visit do you want to edit?', { reply_markup: kb });
+  await ctx.reply(listMsg, { parse_mode: 'Markdown' });
 
-  const pick = await conversation.waitForCallbackQuery(/^ev:/);
-  await pick.answerCallbackQuery();
+  // Wait for number selection
+  let visit: Visit | null = null;
+  let storeName = '';
 
-  if (pick.callbackQuery.data === 'ev:cancel') {
-    await ctx.reply('Edit cancelled.');
-    return;
+  while (!visit) {
+    const pickCtx = await conversation.wait();
+    const text = pickCtx.message?.text?.trim();
+
+    if (!text || text === '/cancel') {
+      await ctx.reply('No worries, cancelled!');
+      return;
+    }
+
+    const num = parseInt(text.replace(/^\//, ''), 10);
+
+    if (isNaN(num) || num < 1 || num > visits.length) {
+      await ctx.reply(`Just type a number between 1 and ${visits.length}.`);
+      continue;
+    }
+
+    const selected = visits[num - 1];
+    visit = await conversation.external(() => getVisitById(selected.id));
+    storeName = (selected as any).stores?.name || 'Unknown store';
+
+    if (!visit) {
+      await ctx.reply("Hmm, couldn't find that visit. Pick another number?");
+      visit = null;
+    }
   }
 
-  const visitId = pick.callbackQuery.data!.replace('ev:', '');
-  const visit = await conversation.external(() => getVisitById(visitId));
-
-  if (!visit) {
-    await ctx.reply('Visit not found.');
-    return;
-  }
-
-  const storeName = (visit as any).stores?.name || 'Unknown store';
-  const notes = visit.visit_notes || visit.raw_notes_combined || '(no notes)';
+  const notes = visit.visit_notes || visit.raw_notes_combined || '_(no notes)_';
 
   await ctx.reply(
     `*${storeName}* — ${new Date(visit.visit_date).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' })}\n\n` +
-    `Current notes:\n${notes}\n\n` +
+    `${notes}\n\n` +
     `What would you like to do?`,
     {
       parse_mode: 'Markdown',
       reply_markup: new InlineKeyboard()
-        .text('Replace notes', 'edit:notes').row()
-        .text('Add photos', 'edit:photos').row()
-        .text('Cancel', 'edit:cancel'),
+        .text('✏️ Replace notes', 'edit:notes').row()
+        .text('📸 Add photos', 'edit:photos').row()
+        .text('← Cancel', 'edit:cancel'),
     },
   );
 
-  const action = await conversation.waitForCallbackQuery(/^edit:/);
-  await action.answerCallbackQuery();
+  const action = await conversation.wait();
+  const actionData = action.callbackQuery?.data;
+  if (action.callbackQuery) await action.answerCallbackQuery();
 
-  if (action.callbackQuery.data === 'edit:cancel') {
-    await ctx.reply('Edit cancelled.');
+  if (!actionData?.startsWith('edit:') || actionData === 'edit:cancel') {
+    await ctx.reply('No worries!');
     return;
   }
 
-  if (action.callbackQuery.data === 'edit:notes') {
-    await ctx.reply('Send your updated notes:');
+  if (actionData === 'edit:notes') {
+    await ctx.reply("Send me the updated notes — I'll replace what's there.");
     const noteCtx = await conversation.wait();
 
     if (noteCtx.message?.text === '/cancel') {
-      await ctx.reply('Edit cancelled.');
+      await ctx.reply('No worries, cancelled!');
       return;
     }
 
     if (noteCtx.message?.text) {
       const updated = await conversation.external(() =>
-        updateVisitNotes(visitId, noteCtx.message!.text!, user.id),
+        updateVisitNotes(visit!.id, noteCtx.message!.text!, user.id),
       );
 
-      if (updated) {
-        await ctx.reply('Notes updated.');
-      } else {
-        await ctx.reply('Failed to update notes.');
-      }
+      await ctx.reply(updated
+        ? 'Notes updated! ✓'
+        : "Hmm, that didn't work. Try again later.");
     }
   }
 
-  if (action.callbackQuery.data === 'edit:photos') {
-    await ctx.reply('Send photos anytime — tap Done when finished.', {
-      reply_markup: new InlineKeyboard().text('Done', 'editphotos:done'),
+  if (actionData === 'edit:photos') {
+    await ctx.reply("Send me the photos — I'll add them to this visit. Hit Done when you're finished.", {
+      reply_markup: new InlineKeyboard().text('✅ Done', 'editphotos:done'),
     });
 
     let addingPhotos = true;
@@ -127,28 +141,28 @@ export async function editVisitFlow(conversation: EditConversation, ctx: BotCont
           const fileName = `${crypto.randomUUID()}.jpg`;
 
           await conversation.external(() =>
-            uploadVisitPhoto(visitId, buffer, fileName, user.market, visit.store_id),
+            uploadVisitPhoto(visit!.id, buffer, fileName, user.market, visit!.store_id),
           );
           count++;
-          await ctx.reply(`${count} photo(s) added. Send more or tap Done.`, {
-            reply_markup: new InlineKeyboard().text('Done', 'editphotos:done'),
+          await ctx.reply(`${count} photo(s) added! Send more or hit Done. 📸`, {
+            reply_markup: new InlineKeyboard().text('✅ Done', 'editphotos:done'),
           });
         } catch (err) {
           console.error('Photo upload failed:', err);
-          await ctx.reply('Photo upload failed. Try again.');
+          await ctx.reply("That photo didn't go through — try sending it again?");
         }
       } else if (photoCtx.message?.text === '/cancel') {
-        await ctx.reply('Edit cancelled.');
+        await ctx.reply('No worries, cancelled!');
         return;
       } else {
-        await ctx.reply('Send a photo, or tap Done if you\'re finished.', {
-          reply_markup: new InlineKeyboard().text('Done', 'editphotos:done'),
+        await ctx.reply("Just send me a photo, or hit Done if you're finished.", {
+          reply_markup: new InlineKeyboard().text('✅ Done', 'editphotos:done'),
         });
       }
     }
 
     if (count > 0) {
-      await ctx.reply(`${count} photo(s) added to your visit.`);
+      await ctx.reply(`${count} photo(s) added to your visit! 🎉`);
     }
   }
 }
