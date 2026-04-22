@@ -11,7 +11,14 @@ import { config } from '../../config.js';
 type VisitConversation = Conversation<BotContext, BotContext>;
 
 export async function visitFlow(conversation: VisitConversation, ctx: BotContext): Promise<void> {
-  const user = ctx.user;
+  const chatId = ctx.from?.id;
+  if (!chatId) return;
+
+  const user = await conversation.external(async () => {
+    const { getUserByTelegramId } = await import('../../db/queries/users.js');
+    return getUserByTelegramId(chatId);
+  });
+
   if (!user) {
     await ctx.reply("You're not registered. Contact your manager to get set up.");
     return;
