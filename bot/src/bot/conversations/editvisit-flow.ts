@@ -102,7 +102,7 @@ export async function editVisitFlow(conversation: EditConversation, ctx: BotCont
   }
 
   if (action.callbackQuery.data === 'edit:photos') {
-    await ctx.reply('Send photos to add. Tap Done when finished.', {
+    await ctx.reply('Send photos anytime — tap Done when finished.', {
       reply_markup: new InlineKeyboard().text('Done', 'editphotos:done'),
     });
 
@@ -141,7 +141,7 @@ export async function editVisitFlow(conversation: EditConversation, ctx: BotCont
         await ctx.reply('Edit cancelled.');
         return;
       } else {
-        await ctx.reply('Send a photo or tap Done.', {
+        await ctx.reply('Send a photo, or tap Done if you\'re finished.', {
           reply_markup: new InlineKeyboard().text('Done', 'editphotos:done'),
         });
       }

@@ -92,7 +92,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     `5️⃣ Buzz Plan`,
   );
 
-  await ctx.reply('Copy the template above, fill it in, and send. Add photos too if you have them.');
+  await ctx.reply('Copy the template above, fill it in, and send. You can send photos anytime — before, with, or after your notes.');
 
   // Step 3: Collect notes + photos
   const photoFileIds: string[] = [];
@@ -110,7 +110,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     if (response.message?.text) {
       visitNotes += (visitNotes ? '\n\n' : '') + response.message.text;
       await ctx.reply(
-        `Got your update. Send photos now, or tap *Done* to save.`,
+        `Got it. You can send photos too, or tap *Done* to save.`,
         {
           parse_mode: 'Markdown',
           reply_markup: new InlineKeyboard().text('Done — save visit', 'visit:done'),
@@ -128,7 +128,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       }
 
       await ctx.reply(
-        `${photoFileIds.length} photo(s) received. Send more, or tap *Done*.`,
+        `${photoFileIds.length} photo(s) received. Send more photos or your notes, or tap *Done*.`,
         {
           parse_mode: 'Markdown',
           reply_markup: new InlineKeyboard().text('Done — save visit', 'visit:done'),
@@ -138,7 +138,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       await response.answerCallbackQuery();
       collecting = false;
     } else {
-      await ctx.reply('Send your update as text or photos. Tap Done when finished.', {
+      await ctx.reply('Send text or photos in any order. Tap Done when finished.', {
         reply_markup: new InlineKeyboard().text('Done — save visit', 'visit:done'),
       });
     }
