@@ -37,7 +37,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
   const storeCallback = await conversation.waitForCallbackQuery(/^(store:|cancel$)/);
 
-  if (storeCallback.match === 'cancel') {
+  if (storeCallback.callbackQuery.data === 'cancel') {
     await storeCallback.answerCallbackQuery('Cancelled');
     await ctx.reply('Visit cancelled.');
     return;
