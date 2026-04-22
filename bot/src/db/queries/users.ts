@@ -19,6 +19,8 @@ export async function getUserByTelegramId(chatId: number): Promise<User | null> 
     .eq('is_active', true)
     .single();
 
+  if (error) console.log('[auth] supabase error:', JSON.stringify(error));
+  if (!data) console.log('[auth] no data returned for chatId:', chatId);
   if (error || !data) return null;
   return data as User;
 }
