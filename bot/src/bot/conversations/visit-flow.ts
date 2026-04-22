@@ -2,7 +2,7 @@ import { Conversation } from '@grammyjs/conversations';
 import { InlineKeyboard } from 'grammy';
 import { BotContext } from '../middleware/auth.js';
 import { getStoresForUser, Store } from '../../db/queries/stores.js';
-import { createVisit, getLastVisitForStore } from '../../db/queries/visits.js';
+import { createVisit, getStoreVisitStats } from '../../db/queries/visits.js';
 import { uploadVisitPhoto } from '../../db/queries/photos.js';
 import {
   getStaffForStore,
@@ -16,7 +16,6 @@ import {
   Staff,
 } from '../../db/queries/staff.js';
 import { buildStorePicker } from '../keyboards/store-picker.js';
-import { daysSinceLabel } from '../../utils/format.js';
 import { config } from '../../config.js';
 
 type VisitConversation = Conversation<BotContext, BotContext>;
@@ -63,18 +62,19 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
   await storeCallback.answerCallbackQuery();
 
-  // Step 2: Show last visit context + template
-  const lastVisit = await conversation.external(() => getLastVisitForStore(storeId, user.id));
+  // Step 2: Show store stats + template
+  const stats = await conversation.external(() => getStoreVisitStats(storeId, user.id));
 
   let contextMsg = `*${store.name}*\n\n`;
-  if (lastVisit) {
-    const snippet = (lastVisit.visit_notes || lastVisit.raw_notes_combined || '').slice(0, 200);
-    contextMsg += `📋 Your last visit was ${daysSinceLabel(lastVisit.visit_date)}\n`;
-    if (snippet) contextMsg += `_${snippet}${snippet.length >= 200 ? '...' : ''}_\n\n`;
-    else contextMsg += '\n';
+  if (stats.daysSinceLastVisit !== null) {
+    const daysLabel = stats.daysSinceLastVisit === 0 ? 'Today' : stats.daysSinceLastVisit === 1 ? '1 day ago' : `${stats.daysSinceLastVisit} days ago`;
+    contextMsg += `📅 Last visit: ${daysLabel}\n`;
   } else {
-    contextMsg += `First time logging this store — nice!\n\n`;
+    contextMsg += `📅 First visit — nice!\n`;
   }
+  contextMsg += `🔄 ${stats.visitsThisMonth} visit${stats.visitsThisMonth === 1 ? '' : 's'} this month\n`;
+  contextMsg += `👥 ${stats.staffCount} staff on record\n`;
+  contextMsg += `📋 ${stats.trainingsThisQuarter} training${stats.trainingsThisQuarter === 1 ? '' : 's'} this quarter`;
 
   await ctx.reply(contextMsg, { parse_mode: 'Markdown' });
 
