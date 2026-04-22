@@ -6,10 +6,13 @@ import { createVisit, getLastVisitForStore } from '../../db/queries/visits.js';
 import { uploadVisitPhoto } from '../../db/queries/photos.js';
 import {
   getStaffForStore,
+  getAllStaffForStore,
   getActiveTrainingModules,
   addStaffToStore,
   logTraining,
-  logAlly,
+  updateStaffName,
+  updateStaffType,
+  setStaffActiveAtStore,
   Staff,
 } from '../../db/queries/staff.js';
 import { buildStorePicker } from '../keyboards/store-picker.js';
@@ -200,7 +203,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       parse_mode: 'Markdown',
       reply_markup: new InlineKeyboard()
         .text('Log training', 'addon:training').row()
-        .text('Log ally', 'addon:ally').row()
+        .text('Update staff', 'addon:staff').row()
         .text('Done', 'addon:done'),
     },
   );
@@ -217,8 +220,8 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     } else if (choice === 'addon:training') {
       await handleTrainingAddon(conversation, ctx, visit.id, storeId);
       await showAddonMenu(ctx);
-    } else if (choice === 'addon:ally') {
-      await handleAllyAddon(conversation, ctx, visit.id, storeId, user.id);
+    } else if (choice === 'addon:staff') {
+      await handleStaffAddon(conversation, ctx, storeId);
       await showAddonMenu(ctx);
     } else if (addonResponse.message?.text === '/cancel') {
       addingMore = false;
@@ -234,7 +237,7 @@ async function showAddonMenu(ctx: BotContext): Promise<void> {
   await ctx.reply('Anything else?', {
     reply_markup: new InlineKeyboard()
       .text('Log training', 'addon:training').row()
-      .text('Log ally', 'addon:ally').row()
+      .text('Update staff', 'addon:staff').row()
       .text('Done', 'addon:done'),
   });
 }
@@ -330,43 +333,137 @@ async function handleTrainingAddon(
   }
 }
 
-async function handleAllyAddon(
+const STAFF_TYPE_LABELS: Record<string, string> = {
+  staff: 'Staff',
+  other_brand: 'Other Brand',
+  part_timer: 'Part Timer',
+};
+
+async function handleStaffAddon(
   conversation: VisitConversation,
   ctx: BotContext,
-  visitId: string,
   storeId: string,
-  cmId: string,
 ): Promise<void> {
-  const staff = await conversation.external(() => getStaffForStore(storeId));
-
-  if (staff.length === 0) {
-    await ctx.reply('No staff on record for this store. Add them first via training log.');
-    return;
-  }
+  const staff = await conversation.external(() => getAllStaffForStore(storeId));
 
   const kb = new InlineKeyboard();
   for (const s of staff) {
-    kb.text(s.name, `ally:${s.id}`).row();
+    const label = s.still_working
+      ? `${s.name} (${STAFF_TYPE_LABELS[s.staff_type]})`
+      : `${s.name} — left`;
+    kb.text(label, `sm:${s.id}`).row();
   }
-  kb.text('Back', 'ally:cancel').row();
+  kb.text('+ Add new staff', 'sm:new').row();
+  kb.text('Back', 'sm:cancel').row();
 
-  await ctx.reply('Which staff member qualified as an ally?', { reply_markup: kb });
+  await ctx.reply('Store staff:', { reply_markup: kb });
 
-  const response = await conversation.wait();
-  const data = response.callbackQuery?.data;
-  if (response.callbackQuery) await response.answerCallbackQuery();
+  const pick = await conversation.wait();
+  const data = pick.callbackQuery?.data;
+  if (pick.callbackQuery) await pick.answerCallbackQuery();
 
-  if (!data?.startsWith('ally:') || data === 'ally:cancel') return;
+  if (!data?.startsWith('sm:') || data === 'sm:cancel') return;
 
-  const staffId = data.replace('ally:', '');
+  if (data === 'sm:new') {
+    await addNewStaff(conversation, ctx, storeId);
+    return;
+  }
+
+  const staffId = data.replace('sm:', '');
   const member = staff.find(s => s.id === staffId);
   if (!member) return;
 
-  const success = await conversation.external(() => logAlly(visitId, staffId, cmId));
+  await editStaffMember(conversation, ctx, storeId, member);
+}
 
-  if (success) {
-    await ctx.reply(`${member.name} marked as ally this quarter.`);
+async function addNewStaff(
+  conversation: VisitConversation,
+  ctx: BotContext,
+  storeId: string,
+): Promise<void> {
+  await ctx.reply("Enter the staff member's name:");
+  const nameCtx = await conversation.wait();
+  const name = nameCtx.message?.text;
+  if (!name || name === '/cancel') return;
+
+  const typeKb = new InlineKeyboard()
+    .text('Staff', 'stype:staff')
+    .text('Other Brand', 'stype:other_brand')
+    .text('Part Timer', 'stype:part_timer');
+
+  await ctx.reply(`What type is *${name}*?`, {
+    parse_mode: 'Markdown',
+    reply_markup: typeKb,
+  });
+
+  const typeCtx = await conversation.wait();
+  const typeData = typeCtx.callbackQuery?.data;
+  if (typeCtx.callbackQuery) await typeCtx.answerCallbackQuery();
+
+  if (!typeData?.startsWith('stype:')) return;
+  const staffType = typeData.replace('stype:', '') as Staff['staff_type'];
+
+  const added = await conversation.external(() => addStaffToStore(name, storeId, staffType));
+  if (added) {
+    await ctx.reply(`Added ${name} (${STAFF_TYPE_LABELS[staffType]}).`);
   } else {
-    await ctx.reply('Failed to log ally. Try again.');
+    await ctx.reply('Failed to add staff member.');
+  }
+}
+
+async function editStaffMember(
+  conversation: VisitConversation,
+  ctx: BotContext,
+  storeId: string,
+  member: Staff & { still_working: boolean },
+): Promise<void> {
+  const kb = new InlineKeyboard()
+    .text('Edit name', 'sedit:name').row()
+    .text('Change type', 'sedit:type').row()
+    .text(member.still_working ? 'Mark as left' : 'Mark as still working', 'sedit:active').row()
+    .text('Back', 'sedit:cancel');
+
+  await ctx.reply(
+    `*${member.name}*\nType: ${STAFF_TYPE_LABELS[member.staff_type]}\nStatus: ${member.still_working ? 'Active' : 'Left'}`,
+    { parse_mode: 'Markdown', reply_markup: kb },
+  );
+
+  const action = await conversation.wait();
+  const choice = action.callbackQuery?.data;
+  if (action.callbackQuery) await action.answerCallbackQuery();
+
+  if (choice === 'sedit:name') {
+    await ctx.reply(`Current name: ${member.name}\nType the new name:`);
+    const nameCtx = await conversation.wait();
+    const newName = nameCtx.message?.text;
+    if (!newName || newName === '/cancel') return;
+
+    const ok = await conversation.external(() => updateStaffName(member.id, newName));
+    await ctx.reply(ok ? `Renamed to ${newName}.` : 'Failed to update name.');
+  } else if (choice === 'sedit:type') {
+    const typeKb = new InlineKeyboard()
+      .text('Staff', 'stype:staff')
+      .text('Other Brand', 'stype:other_brand')
+      .text('Part Timer', 'stype:part_timer');
+
+    await ctx.reply(`Current type: ${STAFF_TYPE_LABELS[member.staff_type]}\nSelect new type:`, {
+      reply_markup: typeKb,
+    });
+
+    const typeCtx = await conversation.wait();
+    const typeData = typeCtx.callbackQuery?.data;
+    if (typeCtx.callbackQuery) await typeCtx.answerCallbackQuery();
+
+    if (!typeData?.startsWith('stype:')) return;
+    const newType = typeData.replace('stype:', '') as Staff['staff_type'];
+
+    const ok = await conversation.external(() => updateStaffType(member.id, newType));
+    await ctx.reply(ok ? `Updated to ${STAFF_TYPE_LABELS[newType]}.` : 'Failed to update type.');
+  } else if (choice === 'sedit:active') {
+    const newActive = !member.still_working;
+    const ok = await conversation.external(() => setStaffActiveAtStore(member.id, storeId, newActive));
+    await ctx.reply(ok
+      ? `${member.name} marked as ${newActive ? 'still working' : 'left'}.`
+      : 'Failed to update status.');
   }
 }

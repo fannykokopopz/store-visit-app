@@ -75,42 +75,42 @@ export async function logTraining(
   return true;
 }
 
-export async function logAlly(
-  visitId: string,
-  staffId: string,
-  cmId: string,
-): Promise<boolean> {
-  const quarter = getCurrentQuarter();
+export async function getAllStaffForStore(storeId: string): Promise<(Staff & { still_working: boolean })[]> {
+  const { data, error } = await supabase
+    .from('staff_store_assignments')
+    .select('staff_id, ended_at, staff(*)')
+    .eq('store_id', storeId);
 
-  const { error: allyErr } = await supabase
-    .from('ally_qualifications')
-    .upsert(
-      { staff_id: staffId, quarter, qualified_by_cm_id: cmId },
-      { onConflict: 'staff_id,quarter' },
-    );
-
-  if (allyErr) {
-    console.error('logAlly qualification error:', allyErr);
-    return false;
-  }
-
-  const { error: logErr } = await supabase
-    .from('visit_ally_logs')
-    .upsert(
-      { visit_id: visitId, staff_id: staffId, quarter },
-      { onConflict: 'visit_id,staff_id' },
-    );
-
-  if (logErr) {
-    console.error('logAlly visit log error:', logErr);
-    return false;
-  }
-
-  return true;
+  if (error || !data) return [];
+  return data
+    .map((row: any) => ({ ...row.staff, still_working: !row.ended_at } as Staff & { still_working: boolean }))
+    .sort((a, b) => {
+      if (a.still_working !== b.still_working) return a.still_working ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
 }
 
-function getCurrentQuarter(): string {
-  const now = new Date();
-  const q = Math.ceil((now.getMonth() + 1) / 3);
-  return `${now.getFullYear()}-Q${q}`;
+export async function updateStaffName(staffId: string, name: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('staff')
+    .update({ name, updated_at: new Date().toISOString() })
+    .eq('id', staffId);
+  return !error;
+}
+
+export async function updateStaffType(staffId: string, staffType: Staff['staff_type']): Promise<boolean> {
+  const { error } = await supabase
+    .from('staff')
+    .update({ staff_type: staffType, updated_at: new Date().toISOString() })
+    .eq('id', staffId);
+  return !error;
+}
+
+export async function setStaffActiveAtStore(staffId: string, storeId: string, active: boolean): Promise<boolean> {
+  const { error } = await supabase
+    .from('staff_store_assignments')
+    .update({ ended_at: active ? null : new Date().toISOString() })
+    .eq('staff_id', staffId)
+    .eq('store_id', storeId);
+  return !error;
 }
