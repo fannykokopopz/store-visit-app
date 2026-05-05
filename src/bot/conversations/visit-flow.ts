@@ -139,7 +139,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     { parse_mode: 'MarkdownV2' },
   );
   await ctx.reply(
-    'Fill in the template and send it back\\. Attach photos to the same message\\.\n' +
+    'Fill in the template and send it back\\. You can attach one photo to the message\\.\n' +
     'Type /cancel to abort\\.',
     { parse_mode: 'MarkdownV2' },
   );
@@ -164,24 +164,10 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       // Extract text from caption or plain text
       const text = msg.message?.caption ?? msg.message?.text ?? null;
 
-      // Extract photo
+      // Extract photo (one per message — attach photos one at a time)
       if (msg.message?.photo) {
         const p = msg.message.photo;
         photoFileIds.push(p[p.length - 1].file_id);
-
-        // Collect additional photos from the same album
-        if (msg.message.media_group_id) {
-          const mgId = msg.message.media_group_id;
-          for (let i = 0; i < 9; i++) {
-            const next = await conversation.wait();
-            if (next.message?.media_group_id === mgId && next.message?.photo) {
-              const np = next.message.photo;
-              photoFileIds.push(np[np.length - 1].file_id);
-            } else {
-              break;
-            }
-          }
-        }
       }
 
       if (!text && photoFileIds.length === 0) {
