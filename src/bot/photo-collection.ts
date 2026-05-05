@@ -37,11 +37,9 @@ export function startPhotoCollection(
   const collection: PhotoCollection = { visitId, storeId, storeName, sections, fileIds, timer: null };
   collections.set(telegramId, collection);
 
-  // If photo 1 arrived with the caption, start debounce now.
-  // Subsequent album photos will reset it via handleIncomingPhoto.
-  if (firstPhotoFileId) {
-    collection.timer = setTimeout(() => finalizeCollection(telegramId), 2000);
-  }
+  // Always start the debounce. If photos arrive they reset the timer;
+  // if none come in 2s, finalize immediately with no photo line.
+  collection.timer = setTimeout(() => finalizeCollection(telegramId), 2000);
 }
 
 export function isCollecting(telegramId: number): boolean {
