@@ -11,13 +11,14 @@ import { handleGrantAccess } from './commands/admin/grant.js';
 import { handleRevokeAccess } from './commands/admin/revoke.js';
 import { handleListAccess } from './commands/admin/list.js';
 import { visitFlow } from './conversations/visit-flow.js';
-import { isCollecting, handleIncomingPhoto } from './photo-collection.js';
+import { initPhotoCollection, isCollecting, handleIncomingPhoto } from './photo-collection.js';
 import { startEditSession, isEditing, getEditSession, clearEditSession } from './edit-session.js';
 import { getVisitInfo, updateVisitSections, deleteVisit } from '../db/queries/visits.js';
 import { parseTemplate, filledCount } from '../utils/parse-template.js';
 
 export function createBot(): Bot<BotContext> {
   const bot = new Bot<BotContext>(config.telegram.botToken);
+  initPhotoCollection(bot.api);
 
   bot.use(session({ initial: () => ({}) }));
   bot.use(conversations());
@@ -39,9 +40,10 @@ export function createBot(): Bot<BotContext> {
 
   // Photo debounce handler — runs after conversation exits, catches album photos
   bot.on('message:photo', async (ctx) => {
-    if (isCollecting(ctx.from?.id ?? 0)) {
-      await handleIncomingPhoto(ctx);
-    }
+    const telegramId = ctx.from?.id ?? 0;
+    if (!isCollecting(telegramId)) return;
+    const p = ctx.message?.photo;
+    if (p) await handleIncomingPhoto(telegramId, p[p.length - 1].file_id);
   });
 
   // Edit mode: CM resends filled template after tapping ✏️ Edit

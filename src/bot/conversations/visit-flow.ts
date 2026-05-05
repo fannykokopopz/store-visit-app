@@ -183,7 +183,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   // Photos from the same album are still arriving as separate Telegram updates.
   // The conversation exits here so they reach bot.on('message:photo') cleanly.
 
-  startPhotoCollection(telegramId, visit.id, storeId, storeName, filled, firstPhotoFileId, ctx);
+  startPhotoCollection(telegramId, visit.id, storeId, storeName, filled, firstPhotoFileId);
 
   await ctx.reply(
     `📝 *Notes locked — ${storeName}*\n` +
