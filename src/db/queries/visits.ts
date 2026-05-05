@@ -108,3 +108,68 @@ export async function getLastVisitDatePerStore(
   }
   return result;
 }
+
+export async function getVisitInfo(
+  visitId: string,
+): Promise<{ cm_telegram_id: number; store_name: string } | null> {
+  const { data, error } = await supabase
+    .from('visits')
+    .select('cm_telegram_id, stores(name)')
+    .eq('id', visitId)
+    .single();
+
+  if (error || !data) return null;
+  return {
+    cm_telegram_id: data.cm_telegram_id,
+    store_name: (data.stores as any)?.name ?? 'Unknown store',
+  };
+}
+
+export async function updateVisitSections(
+  visitId: string,
+  sections: ParsedSections,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('visits')
+    .update({
+      good_news: sections.goodNews,
+      competitors: sections.competitors,
+      display_stock: sections.displayStock,
+      follow_up: sections.followUp,
+      buzz_plan: sections.buzzPlan,
+      edited_at: new Date().toISOString(),
+    })
+    .eq('id', visitId);
+
+  if (error) {
+    console.error('updateVisitSections error:', error);
+    return false;
+  }
+  return true;
+}
+
+export async function deleteVisit(visitId: string): Promise<boolean> {
+  // Fetch photo storage paths before deleting
+  const { data: photos } = await supabase
+    .from('visit_photos')
+    .select('storage_path')
+    .eq('visit_id', visitId);
+
+  if (photos && photos.length > 0) {
+    const paths = photos.map((p: any) => p.storage_path).filter(Boolean);
+    if (paths.length > 0) {
+      await supabase.storage.from('sva-photos').remove(paths);
+    }
+  }
+
+  const { error } = await supabase
+    .from('visits')
+    .delete()
+    .eq('id', visitId);
+
+  if (error) {
+    console.error('deleteVisit error:', error);
+    return false;
+  }
+  return true;
+}

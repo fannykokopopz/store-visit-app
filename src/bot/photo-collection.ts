@@ -1,4 +1,4 @@
-import { Context } from 'grammy';
+import { Context, InlineKeyboard } from 'grammy';
 import { uploadVisitPhoto } from '../db/queries/photos.js';
 import { config } from '../config.js';
 
@@ -21,10 +21,20 @@ export function startPhotoCollection(
   storeId: string,
   storeName: string,
   sections: number,
+  firstPhotoFileId?: string | null,
+  ctx?: Context,
 ): void {
   const existing = collections.get(telegramId);
   if (existing?.timer) clearTimeout(existing.timer);
-  collections.set(telegramId, { visitId, storeId, storeName, sections, fileIds: [], timer: null });
+  const fileIds = firstPhotoFileId ? [firstPhotoFileId] : [];
+  const collection: PhotoCollection = { visitId, storeId, storeName, sections, fileIds, timer: null };
+  collections.set(telegramId, collection);
+
+  // If photo 1 arrived with the template caption, start the debounce now.
+  // Subsequent album photos will reset it. If none come, this fires after 2s.
+  if (firstPhotoFileId && ctx) {
+    collection.timer = setTimeout(() => finalizeCollection(telegramId, ctx), 2000);
+  }
 }
 
 export function isCollecting(telegramId: number): boolean {
@@ -76,5 +86,10 @@ async function finalizeCollection(telegramId: number, ctx: Context): Promise<voi
     `📝 ${collection.sections}/5 sections filled\n` +
     photoLine;
 
-  await ctx.api.sendMessage(telegramId, msg, { parse_mode: 'Markdown' });
+  await ctx.api.sendMessage(telegramId, msg, {
+    parse_mode: 'Markdown',
+    reply_markup: new InlineKeyboard()
+      .text('✏️ Edit notes', `edit:${collection.visitId}`)
+      .text('🗑️ Delete', `delete:${collection.visitId}`),
+  });
 }

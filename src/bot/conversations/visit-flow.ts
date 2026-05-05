@@ -136,6 +136,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   // conversation exits — don't try to collect them inside the conversation.
 
   let templateText: string | null = null;
+  let firstPhotoFileId: string | null = null;
 
   while (true) {
     const msg = await conversation.wait();
@@ -149,6 +150,11 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     if (!text) {
       await ctx.reply('Please send your filled template as text. Type /cancel to abort.');
       continue;
+    }
+
+    // Capture photo 1 if template was sent as an album caption
+    if (msg.message?.photo) {
+      firstPhotoFileId = msg.message.photo[msg.message.photo.length - 1].file_id;
     }
 
     templateText = text;
@@ -177,12 +183,12 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   // Photos from the same album are still arriving as separate Telegram updates.
   // The conversation exits here so they reach bot.on('message:photo') cleanly.
 
-  startPhotoCollection(telegramId, visit.id, storeId, storeName, filled);
+  startPhotoCollection(telegramId, visit.id, storeId, storeName, filled, firstPhotoFileId, ctx);
 
   await ctx.reply(
     `📝 *Notes locked — ${storeName}*\n` +
     `${filled}/5 sections filled\n\n` +
-    `📸 Send photos now\\. I'll save them automatically\\.`,
+    `📸 Photos received — saving in the background\\. Confirmation coming shortly\\.`,
     { parse_mode: 'MarkdownV2' },
   );
 }
