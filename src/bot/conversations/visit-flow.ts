@@ -185,10 +185,12 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
   startPhotoCollection(telegramId, visit.id, storeId, storeName, filled, firstPhotoFileId);
 
+  const photoLine = firstPhotoFileId
+    ? `\n\n📸 Photos received — saving in the background\\. Confirmation coming shortly\\.`
+    : '';
+
   await ctx.reply(
-    `📝 *Notes locked — ${storeName}*\n` +
-    `${filled}/5 sections filled\n\n` +
-    `📸 Photos received — saving in the background\\. Confirmation coming shortly\\.`,
+    `📝 *Notes locked — ${storeName}*\n${filled}/5 sections filled${photoLine}`,
     { parse_mode: 'MarkdownV2' },
   );
 }
