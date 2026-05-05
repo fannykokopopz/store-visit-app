@@ -1,0 +1,32 @@
+{
+  "name": "tc-sva-bot",
+  "version": "0.1.0",
+  "description": "TC Acoustic Store Visit App — Telegram Bot",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "webhook:set": "tsx scripts/setup-webhook.ts",
+    "seed": "tsx scripts/seed-stores.ts",
+    "digest": "tsx scripts/weekly-digest.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "grammy": "^1.42.0",
+    "@grammyjs/conversations": "^2.1.1",
+    "@grammyjs/runner": "^2.0.3",
+    "@supabase/supabase-js": "^2.49.4",
+    "@anthropic-ai/sdk": "^0.39.0",
+    "express": "^5.2.1",
+    "dotenv": "^16.5.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "tsx": "^4.19.4",
+    "@types/express": "^5.0.2",
+    "@types/node": "^22.15.3"
+  }
+}
