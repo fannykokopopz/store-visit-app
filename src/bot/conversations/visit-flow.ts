@@ -15,25 +15,16 @@ import { config } from '../../config.js';
 type VisitConversation = Conversation<BotContext, BotContext>;
 
 export async function visitFlow(conversation: VisitConversation, ctx: BotContext): Promise<void> {
-  console.log('[visit] flow entered, user:', ctx.user?.telegram_id);
-  const user = ctx.user;
-  if (!user) { console.log('[visit] no user, aborting'); return; }
+  const telegramId = ctx.from?.id;
+  if (!telegramId) return;
 
   // ── Step 1: Store selection ────────────────────────────────────────────────
 
-  console.log('[visit] fetching stores...');
   const [stores, lastVisits] = await conversation.external(async () => {
-    try {
-      const s = await getStoresForCM(user.telegram_id);
-      const lv = await getLastVisitDatePerStore(user.telegram_id);
-      console.log('[visit] stores fetched:', s.length);
-      return [s, lv] as const;
-    } catch (err) {
-      console.error('[visit] external error:', err);
-      return [[] as import('../../db/queries/stores.js').Store[], {} as Record<string, string>] as const;
-    }
+    const s = await getStoresForCM(telegramId);
+    const lv = await getLastVisitDatePerStore(telegramId);
+    return [s, lv] as const;
   });
-  console.log('[visit] stores count:', stores.length);
 
   if (stores.length === 0) {
     await ctx.reply("You don't have any stores assigned. Contact your admin.");
@@ -76,7 +67,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
         if (!term) continue;
 
         const results = await conversation.external(() =>
-          searchStoresByName(user.market, term),
+          searchStoresByName('SG', term),
         );
 
         if (results.length === 0) {
@@ -133,7 +124,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
   // ── Show active plan if any ────────────────────────────────────────────────
 
-  const plan = await conversation.external(() => getActivePlan(user.telegram_id, storeId));
+  const plan = await conversation.external(() => getActivePlan(telegramId, storeId));
   if (plan) {
     let planMsg = `📋 *Your plan for ${storeName}:*\n`;
     if (plan.buzz_plan) planMsg += `💡 ${plan.buzz_plan}\n`;
@@ -246,7 +237,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   const sections = parseTemplate(templateText ?? '');
 
   const visit = await conversation.external(() =>
-    createVisit({ store_id: storeId, cm_telegram_id: user.telegram_id }),
+    createVisit({ store_id: storeId, cm_telegram_id: telegramId }),
   );
 
   if (!visit) {
