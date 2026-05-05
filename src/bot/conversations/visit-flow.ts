@@ -15,16 +15,25 @@ import { config } from '../../config.js';
 type VisitConversation = Conversation<BotContext, BotContext>;
 
 export async function visitFlow(conversation: VisitConversation, ctx: BotContext): Promise<void> {
+  console.log('[visit] flow entered, user:', ctx.user?.telegram_id);
   const user = ctx.user;
-  if (!user) return;
+  if (!user) { console.log('[visit] no user, aborting'); return; }
 
   // ── Step 1: Store selection ────────────────────────────────────────────────
 
+  console.log('[visit] fetching stores...');
   const [stores, lastVisits] = await conversation.external(async () => {
-    const s = await getStoresForCM(user.telegram_id);
-    const lv = await getLastVisitDatePerStore(user.telegram_id);
-    return [s, lv] as const;
+    try {
+      const s = await getStoresForCM(user.telegram_id);
+      const lv = await getLastVisitDatePerStore(user.telegram_id);
+      console.log('[visit] stores fetched:', s.length);
+      return [s, lv] as const;
+    } catch (err) {
+      console.error('[visit] external error:', err);
+      return [[] as import('../../db/queries/stores.js').Store[], {} as Record<string, string>] as const;
+    }
   });
+  console.log('[visit] stores count:', stores.length);
 
   if (stores.length === 0) {
     await ctx.reply("You don't have any stores assigned. Contact your admin.");
