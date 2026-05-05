@@ -72,6 +72,12 @@ export function createBot(): Bot<BotContext> {
     }
   });
 
+  // Confirm button — visit is already saved; this closes the action bar
+  bot.callbackQuery(/^confirm_visit:/, async (ctx) => {
+    await ctx.answerCallbackQuery('Visit confirmed! ✅');
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined });
+  });
+
   // Edit button — send the template back and enter edit mode
   bot.callbackQuery(/^edit:/, async (ctx) => {
     const visitId = ctx.callbackQuery.data.replace('edit:', '');

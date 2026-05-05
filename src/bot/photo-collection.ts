@@ -81,7 +81,7 @@ async function finalizeCollection(telegramId: number, ctx: Context): Promise<voi
   const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const photoLine = uploaded > 0 ? `📸 ${uploaded} photo(s)` : '📸 No photos';
   const msg =
-    `✅ *Visit locked — ${collection.storeName}*\n` +
+    `📋 *Visit log — ${collection.storeName}*\n` +
     `📅 ${date}\n` +
     `📝 ${collection.sections}/5 sections filled\n` +
     photoLine;
@@ -89,6 +89,7 @@ async function finalizeCollection(telegramId: number, ctx: Context): Promise<voi
   await ctx.api.sendMessage(telegramId, msg, {
     parse_mode: 'Markdown',
     reply_markup: new InlineKeyboard()
+      .text('✅ Confirm', `confirm_visit:${collection.visitId}`).row()
       .text('✏️ Edit notes', `edit:${collection.visitId}`)
       .text('🗑️ Delete', `delete:${collection.visitId}`),
   });
