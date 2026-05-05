@@ -85,7 +85,6 @@ async function finalizeCollection(telegramId: number): Promise<void> {
   const lines = [
     `📋 *Visit log — ${collection.storeName}*`,
     `📅 ${date}`,
-    `📝 ${collection.sections}/5 sections filled`,
   ];
   if (uploaded > 0) lines.push(`📸 ${uploaded} photo(s)`);
 

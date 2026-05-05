@@ -190,7 +190,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     : '';
 
   await ctx.reply(
-    `📝 *Notes locked — ${storeName}*\n${filled}/5 sections filled${photoLine}`,
+    `📝 *Notes locked — ${storeName}*${photoLine}`,
     { parse_mode: 'MarkdownV2' },
   );
 }
