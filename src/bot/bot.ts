@@ -11,6 +11,7 @@ import { handleGrantAccess } from './commands/admin/grant.js';
 import { handleRevokeAccess } from './commands/admin/revoke.js';
 import { handleListAccess } from './commands/admin/list.js';
 import { visitFlow } from './conversations/visit-flow.js';
+import { isCollecting, handleIncomingPhoto } from './photo-collection.js';
 
 export function createBot(): Bot<BotContext> {
   const bot = new Bot<BotContext>(config.telegram.botToken);
@@ -31,6 +32,13 @@ export function createBot(): Bot<BotContext> {
     const user = requireAuth(ctx);
     if (!user) return;
     await ctx.conversation.enter('visitFlow');
+  });
+
+  // Photo debounce handler — runs after conversation exits, catches album photos
+  bot.on('message:photo', async (ctx) => {
+    if (isCollecting(ctx.from?.id ?? 0)) {
+      await handleIncomingPhoto(ctx);
+    }
   });
 
   // Admin commands

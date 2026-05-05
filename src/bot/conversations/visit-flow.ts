@@ -4,13 +4,11 @@ import { BotContext } from '../middleware/auth.js';
 import { getStoresForCM } from '../../db/queries/stores.js';
 import { searchStoresByName, getStoreById } from '../../db/queries/stores.js';
 import { createVisit, lockVisit, attachVisitSections, getLastVisitDatePerStore } from '../../db/queries/visits.js';
-import { getStaffForStore, createStaff, attachStaffToVisit } from '../../db/queries/staff.js';
 import { getActivePlan, consumePlan } from '../../db/queries/visit-plans.js';
-import { uploadVisitPhoto } from '../../db/queries/photos.js';
-import { buildStorePicker, buildSearchResultsPicker, buildStaffPicker } from '../keyboards/store-picker.js';
+import { buildStorePicker, buildSearchResultsPicker } from '../keyboards/store-picker.js';
 import { buildTemplateMessage } from '../../utils/template.js';
-import { parseTemplate, filledCount, sectionsPreview } from '../../utils/parse-template.js';
-import { config } from '../../config.js';
+import { parseTemplate, filledCount } from '../../utils/parse-template.js';
+import { startPhotoCollection } from '../photo-collection.js';
 
 type VisitConversation = Conversation<BotContext, BotContext>;
 
@@ -39,10 +37,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   let storeName = '';
 
   storeLoop: while (true) {
-    const response = await conversation.waitForCallbackQuery(
-      /^(store:|search:|cancel$)/,
-    );
-
+    const response = await conversation.waitForCallbackQuery(/^(store:|search:|cancel$)/);
     const data = response.callbackQuery.data;
 
     if (data === 'cancel') {
@@ -57,7 +52,6 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
       while (true) {
         const searchMsg = await conversation.wait();
-
         if (searchMsg.message?.text === '/cancel') {
           await ctx.reply('Visit cancelled.');
           return;
@@ -66,9 +60,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
         const term = searchMsg.message?.text?.trim();
         if (!term) continue;
 
-        const results = await conversation.external(() =>
-          searchStoresByName('SG', term),
-        );
+        const results = await conversation.external(() => searchStoresByName('SG', term));
 
         if (results.length === 0) {
           await ctx.reply('No stores found. Try a different name.', {
@@ -89,7 +81,6 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
           await ctx.reply('Visit cancelled.');
           return;
         }
-
         if (pick.callbackQuery.data === 'search:back') {
           await pick.answerCallbackQuery();
           await ctx.reply('Which store did you visit?', {
@@ -132,74 +123,42 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     await ctx.reply(planMsg.trim(), { parse_mode: 'Markdown' });
   }
 
-  // ── Step 2: Template submission (text only) ────────────────────────────────
+  // ── Step 2: Template ───────────────────────────────────────────────────────
 
+  await ctx.reply(buildTemplateMessage(storeName), { parse_mode: 'MarkdownV2' });
   await ctx.reply(
-    buildTemplateMessage(storeName),
+    'Fill in the template and send it back\\. Attach photos to the same message \\(album is fine\\)\\.\nType /cancel to abort\\.',
     { parse_mode: 'MarkdownV2' },
   );
-  await ctx.reply('Fill in the template and send it back\\. Type /cancel to abort\\.', {
-    parse_mode: 'MarkdownV2',
-  });
+
+  // ── Step 3: Collect template text ─────────────────────────────────────────
+  // Photos attached here are handled by the debounce handler after the
+  // conversation exits — don't try to collect them inside the conversation.
 
   let templateText: string | null = null;
-  let confirmed = false;
 
-  while (!confirmed) {
-    templateText = null;
+  while (true) {
+    const msg = await conversation.wait();
 
-    submissionLoop: while (true) {
-      const msg = await conversation.wait();
-
-      if (msg.message?.text === '/cancel') {
-        await ctx.reply('Visit cancelled.');
-        return;
-      }
-
-      const text = msg.message?.caption ?? msg.message?.text ?? null;
-
-      if (!text) {
-        await ctx.reply('Please send your filled template as text. Type /cancel to abort.');
-        continue;
-      }
-
-      templateText = text;
-      break submissionLoop;
-    }
-
-    const sections = parseTemplate(templateText ?? '');
-    const filled = filledCount(sections);
-    const preview = sectionsPreview(sections);
-
-    let confirmMsg = `*Here's what I received for ${storeName}:*\n\n${preview}`;
-    if (filled === 0) confirmMsg += '\n\n⚠️ No sections detected — check the template format.';
-
-    const lockKb = new InlineKeyboard()
-      .text('✅ Lock & add photos', 'lock:confirm').row()
-      .text('🔄 Resend', 'lock:resend').row()
-      .text('❌ Cancel', 'lock:cancel');
-
-    await ctx.reply(confirmMsg, { parse_mode: 'Markdown', reply_markup: lockKb });
-
-    const action = await conversation.waitForCallbackQuery(/^lock:/);
-    await action.answerCallbackQuery();
-
-    if (action.callbackQuery.data === 'lock:cancel') {
+    if (msg.message?.text === '/cancel') {
       await ctx.reply('Visit cancelled.');
       return;
     }
-    if (action.callbackQuery.data === 'lock:resend') {
-      await ctx.reply('OK — send your notes again:');
+
+    const text = msg.message?.caption ?? msg.message?.text ?? null;
+    if (!text) {
+      await ctx.reply('Please send your filled template as text. Type /cancel to abort.');
       continue;
     }
-    if (action.callbackQuery.data === 'lock:confirm') {
-      confirmed = true;
-    }
+
+    templateText = text;
+    break;
   }
 
-  // ── Save visit ─────────────────────────────────────────────────────────────
+  // ── Step 4: Save and lock immediately ─────────────────────────────────────
 
-  const sections = parseTemplate(templateText ?? '');
+  const sections = parseTemplate(templateText);
+  const filled = filledCount(sections);
 
   const visit = await conversation.external(() =>
     createVisit({ store_id: storeId, cm_telegram_id: telegramId }),
@@ -214,138 +173,16 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   await conversation.external(() => lockVisit(visit.id));
   if (plan) await conversation.external(() => consumePlan(plan.id));
 
-  // ── Step 3: Photo upload ───────────────────────────────────────────────────
-  // CMs send photos one by one (or as an album — each photo = one update).
-  // Tap Done to finish. The Done button is what breaks the loop cleanly.
+  // ── Hand off to debounce photo handler and exit ────────────────────────────
+  // Photos from the same album are still arriving as separate Telegram updates.
+  // The conversation exits here so they reach bot.on('message:photo') cleanly.
 
-  const doneKb = new InlineKeyboard().text('Done — no more photos', 'photos:done');
-  await ctx.reply(
-    '📸 *Send your photos now* — up to 6, album or one by one\\.\nTap *Done* when finished\\.',
-    { parse_mode: 'MarkdownV2', reply_markup: doneKb },
-  );
-
-  let uploaded = 0;
-  photoLoop: while (uploaded < 6) {
-    const photoMsg = await conversation.wait();
-
-    if (photoMsg.callbackQuery?.data === 'photos:done') {
-      await photoMsg.answerCallbackQuery();
-      break photoLoop;
-    }
-
-    if (photoMsg.message?.text === '/cancel') {
-      break photoLoop;
-    }
-
-    if (photoMsg.message?.photo) {
-      const p = photoMsg.message.photo;
-      const fileId = p[p.length - 1].file_id;
-
-      try {
-        const file = await ctx.api.getFile(fileId);
-        const fileUrl = `https://api.telegram.org/file/bot${config.telegram.botToken}/${file.file_path}`;
-        const response = await fetch(fileUrl);
-        const buffer = Buffer.from(await response.arrayBuffer());
-        const result = await conversation.external(() =>
-          uploadVisitPhoto(visit.id, buffer, storeId),
-        );
-        if (result) {
-          uploaded++;
-          if (uploaded < 6) {
-            await ctx.reply(
-              `✅ Photo ${uploaded} saved. Send more or tap Done.`,
-              { reply_markup: new InlineKeyboard().text('Done — no more photos', 'photos:done') },
-            );
-          } else {
-            await ctx.reply('✅ Photo 6 saved — that\'s the max, moving on.');
-            break photoLoop;
-          }
-        } else {
-          await ctx.reply('⚠️ Photo failed, try again.', {
-            reply_markup: new InlineKeyboard().text('Done — no more photos', 'photos:done'),
-          });
-        }
-      } catch (err) {
-        console.error('Photo upload failed:', err);
-        await ctx.reply('⚠️ Upload error, try again.', {
-          reply_markup: new InlineKeyboard().text('Done — no more photos', 'photos:done'),
-        });
-      }
-    }
-  }
-
-  // ── Step 4: Optional staff logging ────────────────────────────────────────
-
-  const staffList = await conversation.external(() => getStaffForStore(storeId));
-  const selectedStaffIds = new Set<string>();
-
-  if (staffList.length > 0) {
-    await ctx.reply(
-      'Who was working today? (optional)',
-      { reply_markup: buildStaffPicker(staffList, selectedStaffIds) },
-    );
-
-    staffLoop: while (true) {
-      const staffAction = await conversation.waitForCallbackQuery(/^staff:/);
-      await staffAction.answerCallbackQuery();
-      const d = staffAction.callbackQuery.data;
-
-      if (d === 'staff:done') break staffLoop;
-
-      if (d.startsWith('staff:toggle:')) {
-        const sid = d.replace('staff:toggle:', '');
-        if (selectedStaffIds.has(sid)) selectedStaffIds.delete(sid);
-        else selectedStaffIds.add(sid);
-        await staffAction.editMessageReplyMarkup({
-          reply_markup: buildStaffPicker(staffList, selectedStaffIds),
-        });
-        continue;
-      }
-
-      if (d === 'staff:add') {
-        await ctx.reply("What's their name?");
-        const nameMsg = await conversation.wait();
-        const name = nameMsg.message?.text?.trim();
-        if (!name) continue;
-
-        await ctx.reply("What's their role? (e.g. Sales Associate, Store Manager)");
-        const roleMsg = await conversation.wait();
-        const role = roleMsg.message?.text?.trim() || null;
-
-        const newStaff = await conversation.external(() =>
-          createStaff({ name, role: role ?? undefined, store_id: storeId }),
-        );
-
-        if (newStaff) {
-          staffList.push(newStaff);
-          selectedStaffIds.add(newStaff.id);
-          await ctx.reply(`Added ${name} ✅`, {
-            reply_markup: buildStaffPicker(staffList, selectedStaffIds),
-          });
-        }
-      }
-    }
-
-    if (selectedStaffIds.size > 0) {
-      await conversation.external(() =>
-        attachStaffToVisit(visit.id, Array.from(selectedStaffIds)),
-      );
-    }
-  }
-
-  // ── Final confirmation ─────────────────────────────────────────────────────
-
-  const staffNames = staffList
-    .filter(s => selectedStaffIds.has(s.id))
-    .map(s => s.name)
-    .join(', ');
+  startPhotoCollection(telegramId, visit.id, storeId, storeName, filled);
 
   await ctx.reply(
-    `✅ *Visit locked — ${storeName}*\n` +
-    `📅 ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}\n` +
-    `📝 ${filledCount(sections)}/5 sections filled\n` +
-    `📸 ${uploaded} photo(s)` +
-    (staffNames ? `\n👥 ${staffNames}` : ''),
-    { parse_mode: 'Markdown' },
+    `📝 *Notes locked — ${storeName}*\n` +
+    `${filled}/5 sections filled\n\n` +
+    `📸 Send photos now\\. I'll save them automatically\\.`,
+    { parse_mode: 'MarkdownV2' },
   );
 }
