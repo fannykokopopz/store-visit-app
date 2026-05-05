@@ -71,7 +71,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
         );
 
         if (results.length === 0) {
-          await ctx.reply("No stores found. Try a different name.", {
+          await ctx.reply('No stores found. Try a different name.', {
             reply_markup: new InlineKeyboard()
               .text('← Back to my stores', 'search:back').row()
               .text('Cancel', 'cancel'),
@@ -132,27 +132,22 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     await ctx.reply(planMsg.trim(), { parse_mode: 'Markdown' });
   }
 
-  // ── Step 2: Template + submission ─────────────────────────────────────────
+  // ── Step 2: Template submission (text only) ────────────────────────────────
 
   await ctx.reply(
     buildTemplateMessage(storeName),
     { parse_mode: 'MarkdownV2' },
   );
-  await ctx.reply(
-    'Fill in the template and send it back\\. You can attach one photo to the message\\.\n' +
-    'Type /cancel to abort\\.',
-    { parse_mode: 'MarkdownV2' },
-  );
+  await ctx.reply('Fill in the template and send it back\\. Type /cancel to abort\\.', {
+    parse_mode: 'MarkdownV2',
+  });
 
   let templateText: string | null = null;
-  const photoFileIds: string[] = [];
   let confirmed = false;
 
   while (!confirmed) {
     templateText = null;
-    photoFileIds.length = 0;
 
-    // Collect submission (text or photo+caption)
     submissionLoop: while (true) {
       const msg = await conversation.wait();
 
@@ -161,20 +156,10 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
         return;
       }
 
-      // Extract text from caption or plain text
       const text = msg.message?.caption ?? msg.message?.text ?? null;
 
-      // Extract photo (one per message — attach photos one at a time)
-      if (msg.message?.photo) {
-        const p = msg.message.photo;
-        photoFileIds.push(p[p.length - 1].file_id);
-      }
-
-      if (!text && photoFileIds.length === 0) {
-        await ctx.reply(
-          'Please send your filled template (you can attach photos to the same message). ' +
-          'Type /cancel to abort.',
-        );
+      if (!text) {
+        await ctx.reply('Please send your filled template as text. Type /cancel to abort.');
         continue;
       }
 
@@ -182,19 +167,15 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       break submissionLoop;
     }
 
-    // Parse sections
     const sections = parseTemplate(templateText ?? '');
     const filled = filledCount(sections);
     const preview = sectionsPreview(sections);
 
-    // Build confirmation message
-    let confirmMsg = `*Here's what I received for ${storeName}:*\n\n`;
-    confirmMsg += preview + '\n\n';
-    confirmMsg += `📸 ${photoFileIds.length} photo(s)\n`;
-    if (filled === 0) confirmMsg += '\n⚠️ No sections detected — check the template format.\n';
+    let confirmMsg = `*Here's what I received for ${storeName}:*\n\n${preview}`;
+    if (filled === 0) confirmMsg += '\n\n⚠️ No sections detected — check the template format.';
 
     const lockKb = new InlineKeyboard()
-      .text('✅ Lock visit', 'lock:confirm').row()
+      .text('✅ Lock & add photos', 'lock:confirm').row()
       .text('🔄 Resend', 'lock:resend').row()
       .text('❌ Cancel', 'lock:cancel');
 
@@ -207,12 +188,10 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       await ctx.reply('Visit cancelled.');
       return;
     }
-
     if (action.callbackQuery.data === 'lock:resend') {
-      await ctx.reply('OK — send your notes and photos again:');
-      continue; // loop restarts, collects new submission
+      await ctx.reply('OK — send your notes again:');
+      continue;
     }
-
     if (action.callbackQuery.data === 'lock:confirm') {
       confirmed = true;
     }
@@ -235,11 +214,33 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   await conversation.external(() => lockVisit(visit.id));
   if (plan) await conversation.external(() => consumePlan(plan.id));
 
-  // ── Upload photos ──────────────────────────────────────────────────────────
+  // ── Step 3: Photo upload ───────────────────────────────────────────────────
+  // CMs send photos one by one (or as an album — each photo = one update).
+  // Tap Done to finish. The Done button is what breaks the loop cleanly.
+
+  const doneKb = new InlineKeyboard().text('Done — no more photos', 'photos:done');
+  await ctx.reply(
+    '📸 *Send your photos now* — up to 6, album or one by one\\.\nTap *Done* when finished\\.',
+    { parse_mode: 'MarkdownV2', reply_markup: doneKb },
+  );
 
   let uploaded = 0;
-  if (photoFileIds.length > 0) {
-    for (const fileId of photoFileIds) {
+  photoLoop: while (uploaded < 6) {
+    const photoMsg = await conversation.wait();
+
+    if (photoMsg.callbackQuery?.data === 'photos:done') {
+      await photoMsg.answerCallbackQuery();
+      break photoLoop;
+    }
+
+    if (photoMsg.message?.text === '/cancel') {
+      break photoLoop;
+    }
+
+    if (photoMsg.message?.photo) {
+      const p = photoMsg.message.photo;
+      const fileId = p[p.length - 1].file_id;
+
       try {
         const file = await ctx.api.getFile(fileId);
         const fileUrl = `https://api.telegram.org/file/bot${config.telegram.botToken}/${file.file_path}`;
@@ -248,14 +249,32 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
         const result = await conversation.external(() =>
           uploadVisitPhoto(visit.id, buffer, storeId),
         );
-        if (result) uploaded++;
+        if (result) {
+          uploaded++;
+          if (uploaded < 6) {
+            await ctx.reply(
+              `✅ Photo ${uploaded} saved. Send more or tap Done.`,
+              { reply_markup: new InlineKeyboard().text('Done — no more photos', 'photos:done') },
+            );
+          } else {
+            await ctx.reply('✅ Photo 6 saved — that\'s the max, moving on.');
+            break photoLoop;
+          }
+        } else {
+          await ctx.reply('⚠️ Photo failed, try again.', {
+            reply_markup: new InlineKeyboard().text('Done — no more photos', 'photos:done'),
+          });
+        }
       } catch (err) {
         console.error('Photo upload failed:', err);
+        await ctx.reply('⚠️ Upload error, try again.', {
+          reply_markup: new InlineKeyboard().text('Done — no more photos', 'photos:done'),
+        });
       }
     }
   }
 
-  // ── Step 3: Optional staff logging ────────────────────────────────────────
+  // ── Step 4: Optional staff logging ────────────────────────────────────────
 
   const staffList = await conversation.external(() => getStaffForStore(storeId));
   const selectedStaffIds = new Set<string>();
@@ -275,11 +294,8 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
       if (d.startsWith('staff:toggle:')) {
         const sid = d.replace('staff:toggle:', '');
-        if (selectedStaffIds.has(sid)) {
-          selectedStaffIds.delete(sid);
-        } else {
-          selectedStaffIds.add(sid);
-        }
+        if (selectedStaffIds.has(sid)) selectedStaffIds.delete(sid);
+        else selectedStaffIds.add(sid);
         await staffAction.editMessageReplyMarkup({
           reply_markup: buildStaffPicker(staffList, selectedStaffIds),
         });
@@ -317,24 +333,19 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
   }
 
-  // ── Confirmation ───────────────────────────────────────────────────────────
+  // ── Final confirmation ─────────────────────────────────────────────────────
 
   const staffNames = staffList
     .filter(s => selectedStaffIds.has(s.id))
     .map(s => s.name)
     .join(', ');
 
-  const uploadNote = photoFileIds.length > 0 && uploaded < photoFileIds.length
-    ? `\n⚠️ ${uploaded}/${photoFileIds.length} photos uploaded`
-    : '';
-
   await ctx.reply(
     `✅ *Visit locked — ${storeName}*\n` +
     `📅 ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}\n` +
     `📝 ${filledCount(sections)}/5 sections filled\n` +
-    (staffNames ? `👥 ${staffNames}\n` : '') +
     `📸 ${uploaded} photo(s)` +
-    uploadNote,
+    (staffNames ? `\n👥 ${staffNames}` : ''),
     { parse_mode: 'Markdown' },
   );
 }
