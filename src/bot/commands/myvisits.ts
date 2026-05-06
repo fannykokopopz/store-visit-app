@@ -1,3 +1,4 @@
+import { InlineKeyboard } from 'grammy';
 import { BotContext } from '../middleware/auth.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getRecentVisitsByCM } from '../../db/queries/visits.js';
@@ -13,15 +14,16 @@ export async function handleMyVisits(ctx: BotContext): Promise<void> {
     return;
   }
 
-  const lines = visits.map((v) => {
+  const keyboard = new InlineKeyboard();
+  for (const v of visits) {
     const date = new Date(v.visit_date).toLocaleDateString('en-GB', {
       day: '2-digit', month: 'short',
     });
-    return `📍 *${v.stores.name}* — ${date}`;
-  });
+    keyboard.text(`📍 ${v.stores.name} — ${date}`, `viewvisit:${v.id}`).row();
+  }
 
-  await ctx.reply(
-    `*Your last ${visits.length} visits:*\n\n${lines.join('\n')}`,
-    { parse_mode: 'Markdown' },
-  );
+  await ctx.reply(`*Your last ${visits.length} visits:* (tap to view)`, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard,
+  });
 }

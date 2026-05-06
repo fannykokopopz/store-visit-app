@@ -15,6 +15,7 @@ import { initPhotoCollection, isCollecting, handleIncomingPhoto } from './photo-
 import { startEditSession, isEditing, getEditSession, clearEditSession } from './edit-session.js';
 import { getVisitInfo, updateVisitSections, deleteVisit } from '../db/queries/visits.js';
 import { parseTemplate, filledCount } from '../utils/parse-template.js';
+import { sendVisitDetails } from './visit-details.js';
 
 export function createBot(): Bot<BotContext> {
   const bot = new Bot<BotContext>(config.telegram.botToken);
@@ -72,6 +73,20 @@ export function createBot(): Bot<BotContext> {
     } else {
       await ctx.reply('Something went wrong updating your visit. Please try again.');
     }
+  });
+
+  // View full last visit — fired from the pre-visit context block
+  bot.callbackQuery(/^viewlast:/, async (ctx) => {
+    const visitId = ctx.callbackQuery.data.replace('viewlast:', '');
+    await ctx.answerCallbackQuery();
+    await sendVisitDetails(ctx, visitId);
+  });
+
+  // View a specific visit — fired from /myvisits inline buttons
+  bot.callbackQuery(/^viewvisit:/, async (ctx) => {
+    const visitId = ctx.callbackQuery.data.replace('viewvisit:', '');
+    await ctx.answerCallbackQuery();
+    await sendVisitDetails(ctx, visitId);
   });
 
   // Confirm button — visit is already saved; this closes the action bar

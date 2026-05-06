@@ -109,6 +109,56 @@ export async function getLastVisitDatePerStore(
   return result;
 }
 
+export async function getStoreContextForCM(
+  telegramId: number,
+  storeId: string,
+): Promise<{ lastVisitId: string | null; lastVisitDate: string | null; last30dCount: number }> {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const [lastRes, countRes] = await Promise.all([
+    supabase
+      .from('visits')
+      .select('id, visit_date')
+      .eq('cm_telegram_id', telegramId)
+      .eq('store_id', storeId)
+      .eq('is_locked', true)
+      .order('visit_date', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('visits')
+      .select('id', { count: 'exact', head: true })
+      .eq('cm_telegram_id', telegramId)
+      .eq('store_id', storeId)
+      .eq('is_locked', true)
+      .gte('visit_date', since),
+  ]);
+
+  return {
+    lastVisitId: (lastRes.data as any)?.id ?? null,
+    lastVisitDate: (lastRes.data as any)?.visit_date ?? null,
+    last30dCount: countRes.count ?? 0,
+  };
+}
+
+export async function getFullVisit(
+  visitId: string,
+): Promise<(Visit & { store_name: string }) | null> {
+  const { data, error } = await supabase
+    .from('visits')
+    .select('*, stores(name)')
+    .eq('id', visitId)
+    .single();
+
+  if (error || !data) return null;
+  const v = data as any;
+  return { ...v, store_name: v.stores?.name ?? 'Unknown store' } as Visit & {
+    store_name: string;
+  };
+}
+
 export async function getVisitInfo(
   visitId: string,
 ): Promise<{ cm_telegram_id: number; store_name: string } | null> {
