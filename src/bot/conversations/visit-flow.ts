@@ -10,6 +10,7 @@ import { buildTemplateMessage } from '../../utils/template.js';
 import { parseTemplate, filledCount } from '../../utils/parse-template.js';
 import { daysSinceLabel } from '../../utils/format.js';
 import { startPhotoCollection } from '../photo-collection.js';
+import { sendVisitDetails } from '../visit-details.js';
 
 type VisitConversation = Conversation<BotContext, BotContext>;
 
@@ -169,6 +170,20 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
   while (true) {
     const msg = await conversation.wait();
+
+    // Handle "View full last visit" / "View visit" inline.
+    // Global bot.callbackQuery handlers don't fire while a conversation is active.
+    if (msg.callbackQuery) {
+      const data = msg.callbackQuery.data ?? '';
+      if (data.startsWith('viewlast:') || data.startsWith('viewvisit:')) {
+        const visitId = data.replace(/^view(last|visit):/, '');
+        await msg.answerCallbackQuery();
+        await sendVisitDetails(msg, visitId);
+      } else {
+        await msg.answerCallbackQuery().catch(() => {});
+      }
+      continue;
+    }
 
     if (msg.message?.text === '/cancel') {
       await ctx.reply('Visit cancelled.');
