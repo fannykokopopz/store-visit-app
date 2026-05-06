@@ -6,6 +6,7 @@ import { handleStart } from './commands/start.js';
 import { handleHelp } from './commands/help.js';
 import { handleMyStores } from './commands/mystores.js';
 import { handleMyVisits } from './commands/myvisits.js';
+import { handleStoreVisits, handleStoreVisitsPicked } from './commands/storevisits.js';
 import { handleCancel } from './commands/cancel.js';
 import { handleGrantAccess } from './commands/admin/grant.js';
 import { handleRevokeAccess } from './commands/admin/revoke.js';
@@ -31,6 +32,7 @@ export function createBot(): Bot<BotContext> {
   bot.command('help', handleHelp);
   bot.command('mystores', handleMyStores);
   bot.command('myvisits', handleMyVisits);
+  bot.command('storevisits', handleStoreVisits);
   bot.command('cancel', handleCancel);
 
   bot.command('visit', async (ctx) => {
@@ -82,11 +84,18 @@ export function createBot(): Bot<BotContext> {
     await sendVisitDetails(ctx, visitId);
   });
 
-  // View a specific visit — fired from /myvisits inline buttons
+  // View a specific visit — fired from /myvisits and /storevisits inline buttons
   bot.callbackQuery(/^viewvisit:/, async (ctx) => {
     const visitId = ctx.callbackQuery.data.replace('viewvisit:', '');
     await ctx.answerCallbackQuery();
     await sendVisitDetails(ctx, visitId);
+  });
+
+  // Pick a store from /storevisits → list visits at that store
+  bot.callbackQuery(/^svstore:/, async (ctx) => {
+    const storeId = ctx.callbackQuery.data.replace('svstore:', '');
+    await ctx.answerCallbackQuery();
+    await handleStoreVisitsPicked(ctx, storeId);
   });
 
   // Confirm button — visit is already saved; this closes the action bar

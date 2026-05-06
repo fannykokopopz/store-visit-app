@@ -1,7 +1,24 @@
-import { Context } from 'grammy';
+import { BotContext } from '../middleware/auth.js';
 
-export async function handleHelp(ctx: Context): Promise<void> {
+export async function handleHelp(ctx: BotContext): Promise<void> {
+  const isAdmin = ctx.user?.role === 'admin';
+
+  const adminBlock = isAdmin
+    ? `\n🛠 *Admin commands*\n` +
+      `/grantaccess — add a CM to the allowlist\n` +
+      `/revokeaccess — remove a CM\n` +
+      `/listaccess — list all active CMs\n\n`
+    : '';
+
   await ctx.reply(
+    `🤖 *Commands*\n\n` +
+    `/visit — log a new store visit\n` +
+    `/mystores — your assigned stores + last-visit-ago\n` +
+    `/myvisits — your last 5 visits (tap to view)\n` +
+    `/storevisits — pick a store, see all your visits there\n` +
+    `/cancel — abort the current action\n` +
+    `/help — show this help\n` +
+    adminBlock + `\n` +
     `📝 *How to log a great visit*\n\n` +
     `The bot gives you a 5-section template. Here's what to write:\n\n` +
     `*1. Good News*\n` +

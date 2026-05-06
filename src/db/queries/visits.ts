@@ -90,6 +90,24 @@ export async function getRecentVisitsByCM(
   return data as any;
 }
 
+export async function getVisitsByCMAndStore(
+  telegramId: number,
+  storeId: string,
+  limit = 20,
+): Promise<Visit[]> {
+  const { data, error } = await supabase
+    .from('visits')
+    .select('*')
+    .eq('cm_telegram_id', telegramId)
+    .eq('store_id', storeId)
+    .eq('is_locked', true)
+    .order('visit_date', { ascending: false })
+    .limit(limit);
+
+  if (error || !data) return [];
+  return data as Visit[];
+}
+
 export async function getLastVisitDatePerStore(
   telegramId: number,
 ): Promise<Record<string, string>> {
