@@ -10,8 +10,8 @@ import crypto from "crypto";
 const MAX_AGE_SECONDS = 24 * 60 * 60;
 
 function botToken(): string {
-  const t = process.env.BOT_TOKEN;
-  if (!t) throw new Error("Missing BOT_TOKEN env var");
+  const t = process.env.TELEGRAM_BOT_TOKEN;
+  if (!t) throw new Error("Missing TELEGRAM_BOT_TOKEN env var");
   return t;
 }
 

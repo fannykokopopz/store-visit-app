@@ -15,6 +15,13 @@ Telegram Mini App for CMs — richer mobile views over the same `sva` Supabase s
 - Supabase (`sva` schema, service role)
 - Telegram Mini App `initData` HMAC auth
 
+## Env vars (matches the bot)
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `TELEGRAM_BOT_TOKEN`
+- `PORT` (Railway sets this automatically)
+
 ## Local dev
 
 ```bash
