@@ -58,3 +58,20 @@ export async function getPhotosForVisit(visitId: string): Promise<VisitPhoto[]> 
   if (error || !data) return [];
   return data as VisitPhoto[];
 }
+
+export async function signPhotoUrls(
+  paths: string[],
+  ttlSec = 300,
+): Promise<string[]> {
+  if (paths.length === 0) return [];
+  const { data, error } = await supabase.storage
+    .from('sva-photos')
+    .createSignedUrls(paths, ttlSec);
+  if (error || !data) {
+    console.error('signPhotoUrls error:', error);
+    return [];
+  }
+  return data
+    .map((d: any) => d.signedUrl as string)
+    .filter((u: string) => Boolean(u));
+}
