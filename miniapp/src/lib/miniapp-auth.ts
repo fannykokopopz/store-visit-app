@@ -7,8 +7,13 @@ import crypto from "crypto";
 //   expected    = HMAC_SHA256(key=secret_key, message=data_check)
 //   valid iff   expected === initData.hash
 
-const BOT_TOKEN = process.env.BOT_TOKEN!;
 const MAX_AGE_SECONDS = 24 * 60 * 60;
+
+function botToken(): string {
+  const t = process.env.BOT_TOKEN;
+  if (!t) throw new Error("Missing BOT_TOKEN env var");
+  return t;
+}
 
 export interface InitDataUser {
   id: number;
@@ -37,7 +42,7 @@ export function verifyInitData(initData: string): VerifiedInitData | null {
     .map(([k, v]) => `${k}=${v}`)
     .join("\n");
 
-  const secretKey = crypto.createHmac("sha256", "WebAppData").update(BOT_TOKEN).digest();
+  const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken()).digest();
   const expected = crypto.createHmac("sha256", secretKey).update(dataCheck).digest("hex");
   const expectedBuf = Buffer.from(expected, "hex");
   const hashBuf = Buffer.from(hash, "hex");
