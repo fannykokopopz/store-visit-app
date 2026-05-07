@@ -19,11 +19,11 @@ const TG_CAPTION_LIMIT = 1000; // Telegram caps at 1024; leave headroom for mark
 export async function sendVisitDetails(ctx: Context, visitId: string): Promise<void> {
   const visit = await getFullVisit(visitId);
   if (!visit) {
-    await ctx.reply('Visit not found.');
+    await ctx.reply("Couldn't find that visit.");
     return;
   }
   if (visit.cm_telegram_id !== ctx.from?.id) {
-    await ctx.reply("That's not your visit.");
+    await ctx.reply("You don't have access to that visit.");
     return;
   }
 
@@ -46,7 +46,7 @@ export async function sendVisitDetails(ctx: Context, visitId: string): Promise<v
       lines.push(`${emoji} *${label}*`, val, '');
     }
   }
-  if (!anyFilled) lines.push('_No notes filled in for this visit._');
+  if (!anyFilled) lines.push('_No notes were added for this visit._');
 
   // If photos exist but signing failed, show count so user knows they're there
   if (photos.length > 0 && photoUrls.length === 0) {

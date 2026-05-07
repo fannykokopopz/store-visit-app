@@ -9,7 +9,7 @@ export async function handleStoreVisits(ctx: BotContext): Promise<void> {
 
   const stores = await getStoresForCM(user.telegram_id);
   if (stores.length === 0) {
-    await ctx.reply("You don't have any stores assigned. Contact your admin.");
+    await ctx.reply("No stores assigned to you yet. Ask your manager to set this up.");
     return;
   }
 
@@ -19,7 +19,7 @@ export async function handleStoreVisits(ctx: BotContext): Promise<void> {
     keyboard.text(`📍 ${store.name}${tier}`, `svstore:${store.id}`).row();
   }
 
-  await ctx.reply('*Pick a store to see your visits:*', {
+  await ctx.reply('*Which store do you want to look up?*', {
     parse_mode: 'Markdown',
     reply_markup: keyboard,
   });
@@ -38,13 +38,13 @@ export async function handleStoreVisitsPicked(
   ]);
 
   if (!store) {
-    await ctx.reply('Store not found.');
+    await ctx.reply("Couldn't find that store. Try again.");
     return;
   }
 
   if (visits.length === 0) {
     await ctx.reply(
-      `No visits logged at *${store.name}* yet.\nUse /visit to log one.`,
+      `No visits logged at *${store.name}* yet. Use /visit to add one.`,
       { parse_mode: 'Markdown' },
     );
     return;
@@ -62,7 +62,7 @@ export async function handleStoreVisitsPicked(
 
   const tier = store.tier ? ` (${store.tier})` : '';
   await ctx.reply(
-    `*${store.name}${tier}* — ${visits.length} visit${visits.length === 1 ? '' : 's'} (tap to view):`,
+    `*${store.name}${tier}* — ${visits.length} visit${visits.length === 1 ? '' : 's'}, tap to view:`,
     { parse_mode: 'Markdown', reply_markup: keyboard },
   );
 }

@@ -9,13 +9,13 @@ export async function handleMyStores(ctx: BotContext): Promise<void> {
 
   const stores = await getStoresForCM(user.telegram_id);
   if (stores.length === 0) {
-    await ctx.reply("You don't have any stores assigned yet. Contact your manager.");
+    await ctx.reply("No stores assigned to you yet. Ask your manager to set this up.");
     return;
   }
 
   const lastVisits = await getLastVisitDatePerStore(user.telegram_id);
 
-  let message = '📋 *YOUR STORE PORTFOLIO*\n';
+  let message = '📋 *Your Store Portfolio*\n';
 
   for (const store of stores) {
     const lastDate = lastVisits[store.id] ?? null;
@@ -24,7 +24,7 @@ export async function handleMyStores(ctx: BotContext): Promise<void> {
     message += `\n   ${daysSinceLabel(lastDate)}\n`;
   }
 
-  message += '\nType /visit to log a new visit.';
+  message += '\nTap /visit to log a visit.';
 
   await ctx.reply(message, { parse_mode: 'Markdown' });
 }
