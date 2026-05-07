@@ -27,7 +27,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   });
 
   if (stores.length === 0) {
-    await ctx.reply("You don't have any stores assigned. Contact your admin.");
+    await ctx.reply("No stores assigned to you yet. Ask your manager to set this up.");
     return;
   }
 
@@ -44,7 +44,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
     if (data === 'cancel') {
       await response.answerCallbackQuery();
-      await ctx.reply('Visit cancelled.');
+      await ctx.reply('No worries — visit cancelled.');
       return;
     }
 
@@ -55,7 +55,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       while (true) {
         const searchMsg = await conversation.wait();
         if (searchMsg.message?.text === '/cancel') {
-          await ctx.reply('Visit cancelled.');
+          await ctx.reply('No worries — visit cancelled.');
           return;
         }
 
@@ -65,13 +65,13 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
         const results = await conversation.external(() => searchStoresByName('SG', term));
 
         if (results.length === 0) {
-          await ctx.reply('No stores found. Try a different name.', {
+          await ctx.reply("No stores found. Try a different search term.", {
             reply_markup: new InlineKeyboard()
               .text('← Back to my stores', 'search:back').row()
               .text('Cancel', 'cancel'),
           });
         } else {
-          await ctx.reply('Select a store:', {
+          await ctx.reply('Pick a store:', {
             reply_markup: buildSearchResultsPicker(results),
           });
         }
@@ -80,7 +80,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
         if (pick.callbackQuery.data === 'cancel') {
           await pick.answerCallbackQuery();
-          await ctx.reply('Visit cancelled.');
+          await ctx.reply('No worries — visit cancelled.');
           return;
         }
         if (pick.callbackQuery.data === 'search:back') {
@@ -147,7 +147,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
   const plan = await conversation.external(() => getActivePlan(telegramId, storeId));
   if (plan) {
-    let planMsg = `📋 *Your plan for ${storeName}:*\n`;
+    let planMsg = `📋 *Your plan for ${storeName}*\n`;
     if (plan.buzz_plan) planMsg += `💡 ${plan.buzz_plan}\n`;
     if (plan.notes) planMsg += `📝 ${plan.notes}`;
     await ctx.reply(planMsg.trim(), { parse_mode: 'Markdown' });
@@ -157,7 +157,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
   await ctx.reply(buildTemplateMessage(storeName), { parse_mode: 'MarkdownV2' });
   await ctx.reply(
-    'Fill in the template and send it back\\. Attach photos to the same message \\(album is fine\\)\\.\nType /cancel to abort\\.',
+    'Fill in each section and send it back\\. Photos? Attach them to the same message \\(album works\\)\\.\nType /cancel to stop\\.',
     { parse_mode: 'MarkdownV2' },
   );
 
@@ -186,13 +186,13 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
 
     if (msg.message?.text === '/cancel') {
-      await ctx.reply('Visit cancelled.');
+      await ctx.reply('No worries — visit cancelled.');
       return;
     }
 
     const text = msg.message?.caption ?? msg.message?.text ?? null;
     if (!text) {
-      await ctx.reply('Please send your filled template as text. Type /cancel to abort.');
+      await ctx.reply('Send your filled template as a text message. Type /cancel to stop.');
       continue;
     }
 
@@ -215,7 +215,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   );
 
   if (!visit) {
-    await ctx.reply('Something went wrong saving your visit. Please try /visit again.');
+    await ctx.reply("Something went wrong saving your visit. Give /visit another try.");
     return;
   }
 
@@ -230,11 +230,11 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   startPhotoCollection(telegramId, visit.id, storeId, storeName, filled, firstPhotoFileId);
 
   const photoLine = firstPhotoFileId
-    ? `\n\n📸 Photos received — saving in the background\\. Confirmation coming shortly\\.`
+    ? `\n\n📸 Photos received — saving in the background\\. You'll get a confirmation shortly\\.`
     : '';
 
   await ctx.reply(
-    `📝 *Notes locked — ${storeName}*${photoLine}`,
+    `✅ *Visit saved — ${storeName}*${photoLine}`,
     { parse_mode: 'MarkdownV2' },
   );
 }

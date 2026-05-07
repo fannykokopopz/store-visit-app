@@ -4,9 +4,7 @@ import { config } from '../config.js';
 import { BotContext, authMiddleware, requireAuth } from './middleware/auth.js';
 import { handleStart } from './commands/start.js';
 import { handleHelp } from './commands/help.js';
-import { handleMyStores } from './commands/mystores.js';
-import { handleMyVisits } from './commands/myvisits.js';
-import { handleStoreVisits, handleStoreVisitsPicked } from './commands/storevisits.js';
+import { handleMyProfile, handleProfileStores, handleProfileVisits, handleProfileBack } from './commands/myprofile.js';
 import { handleCancel } from './commands/cancel.js';
 import { handleGrantAccess } from './commands/admin/grant.js';
 import { handleRevokeAccess } from './commands/admin/revoke.js';
@@ -30,9 +28,7 @@ export function createBot(): Bot<BotContext> {
 
   bot.command('start', handleStart);
   bot.command('help', handleHelp);
-  bot.command('mystores', handleMyStores);
-  bot.command('myvisits', handleMyVisits);
-  bot.command('storevisits', handleStoreVisits);
+  bot.command('myprofile', handleMyProfile);
   bot.command('cancel', handleCancel);
 
   bot.command('visit', async (ctx) => {
@@ -91,12 +87,10 @@ export function createBot(): Bot<BotContext> {
     await sendVisitDetails(ctx, visitId);
   });
 
-  // Pick a store from /storevisits → list visits at that store
-  bot.callbackQuery(/^svstore:/, async (ctx) => {
-    const storeId = ctx.callbackQuery.data.replace('svstore:', '');
-    await ctx.answerCallbackQuery();
-    await handleStoreVisitsPicked(ctx, storeId);
-  });
+  // /myprofile inline expansions
+  bot.callbackQuery('profile:stores', handleProfileStores);
+  bot.callbackQuery('profile:visits', handleProfileVisits);
+  bot.callbackQuery('profile:back', handleProfileBack);
 
   // Confirm button — visit is already saved; this closes the action bar
   bot.callbackQuery(/^confirm_visit:/, async (ctx) => {

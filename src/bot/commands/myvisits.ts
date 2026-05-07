@@ -10,7 +10,7 @@ export async function handleMyVisits(ctx: BotContext): Promise<void> {
   const visits = await getRecentVisitsByCM(user.telegram_id, 5);
 
   if (visits.length === 0) {
-    await ctx.reply('No visits logged yet. Use /visit to log one.');
+    await ctx.reply("Nothing here yet. Use /visit to log your first visit.");
     return;
   }
 
@@ -22,7 +22,7 @@ export async function handleMyVisits(ctx: BotContext): Promise<void> {
     keyboard.text(`📍 ${v.stores.name} — ${date}`, `viewvisit:${v.id}`).row();
   }
 
-  await ctx.reply(`*Your last ${visits.length} visits:* (tap to view)`, {
+  await ctx.reply(`*Your last ${visits.length} visit${visits.length === 1 ? '' : 's'}* — tap to view:`, {
     parse_mode: 'Markdown',
     reply_markup: keyboard,
   });

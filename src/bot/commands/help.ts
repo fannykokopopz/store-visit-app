@@ -4,39 +4,37 @@ export async function handleHelp(ctx: BotContext): Promise<void> {
   const isAdmin = ctx.user?.role === 'admin';
 
   const adminBlock = isAdmin
-    ? `\n🛠 *Admin commands*\n` +
-      `/grantaccess — add a CM to the allowlist\n` +
+    ? `\n🛠 *Admin*\n` +
+      `/grantaccess — add a CM\n` +
       `/revokeaccess — remove a CM\n` +
       `/listaccess — list all active CMs\n\n`
     : '';
 
   await ctx.reply(
-    `🤖 *Commands*\n\n` +
-    `/visit — log a new store visit\n` +
-    `/mystores — your assigned stores + last-visit-ago\n` +
-    `/myvisits — your last 5 visits (tap to view)\n` +
-    `/storevisits — pick a store, see all your visits there\n` +
-    `/cancel — abort the current action\n` +
-    `/help — show this help\n` +
+    `📱 *Commands*\n\n` +
+    `📍 /visit — log a new store visit\n` +
+    `👤 /myprofile — your profile, stores & recent visits\n` +
+    `🚫 /cancel — stop what you're doing\n` +
+    `❓ /help — show this\n` +
     adminBlock + `\n` +
-    `📝 *How to log a great visit*\n\n` +
-    `The bot gives you a 5-section template. Here's what to write:\n\n` +
-    `*1. Good News*\n` +
-    `Wins, positive feedback, strong staff moments.\n` +
-    `Example: "Aisyah upsold a Sonos Move to a walk-in customer today."\n\n` +
-    `*2. Competitors' Insights*\n` +
-    `What competing brands are doing — promotions, demos, shelf space changes.\n` +
-    `Example: "Bose had a promoter in doing live demos on QC45."\n\n` +
-    `*3. Display & Stock*\n` +
-    `Demo unit condition, display quality, shelf space gained or lost.\n` +
-    `Example: "Era 300 demo cracked — needs replacement. Arc end-cap looks great."\n\n` +
-    `*4. What to Follow Up*\n` +
-    `Action items — who to contact, what to check next visit.\n` +
-    `Example: "Check if replacement unit arrived. Follow up with James on Trueplay demo."\n\n` +
-    `*5. Buzz Plan*\n` +
-    `Your plan or creative tactic for driving sales at this store.\n` +
-    `Example: "Offered the team a team dinner if they hit 10K this month."\n\n` +
-    `💡 *Tip:* Names, product models, and numbers make your notes far more useful.`,
+    `📝 *How to write great visit notes*\n\n` +
+    `You'll get a 5-section template. Here's what goes in each:\n\n` +
+    `🌟 *Good News*\n` +
+    `Wins, great staff moments, strong sales.\n` +
+    `_e.g. "Aisyah upsold a Sonos Move to a walk-in today."_\n\n` +
+    `🔍 *Competitors' Insights*\n` +
+    `What other brands are doing — promos, demos, shelf changes.\n` +
+    `_e.g. "Bose had a promoter in doing live QC45 demos."_\n\n` +
+    `📦 *Display & Stock*\n` +
+    `Demo unit condition, display quality, shelf space won or lost.\n` +
+    `_e.g. "Era 300 demo cracked — needs replacement. Arc end-cap looks great."_\n\n` +
+    `✅ *What to Follow Up*\n` +
+    `Action items for you or the team before your next visit.\n` +
+    `_e.g. "Check if replacement unit arrived. Follow up with James on Trueplay."_\n\n` +
+    `⚡ *Buzz Plan*\n` +
+    `Your tactic for driving sales at this store.\n` +
+    `_e.g. "Offered the team a dinner if they hit 10K this month."_\n\n` +
+    `💡 *Tip:* Names, models, and numbers make your notes 10x more useful.`,
     { parse_mode: 'Markdown' },
   );
 }
