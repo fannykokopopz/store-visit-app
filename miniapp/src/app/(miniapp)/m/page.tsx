@@ -19,38 +19,62 @@ interface Portfolio {
   stores: PortfolioStore[];
 }
 
-function daysAgo(dateStr: string | null): string {
-  if (!dateStr) return "Never visited";
+// Days before a store is considered overdue, by tier
+const OVERDUE_DAYS: Record<string, number> = {
+  T1: 7,
+  T2: 14,
+  T3: 30,
+  T4: 90,
+};
+
+function daysSince(dateStr: string | null): number | null {
+  if (!dateStr) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const then = new Date(dateStr);
   then.setHours(0, 0, 0, 0);
-  const diff = Math.round((today.getTime() - then.getTime()) / 86400000);
-  if (diff <= 0) return "Today";
-  if (diff === 1) return "1 day ago";
-  if (diff < 30) return `${diff} days ago`;
-  if (diff < 60) return "Over a month ago";
+  return Math.round((today.getTime() - then.getTime()) / 86400000);
+}
+
+function lastVisitLabel(dateStr: string | null): string {
+  const days = daysSince(dateStr);
+  if (days === null) return "Never visited";
+  if (days <= 0) return "Visited today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return "Over a week ago";
+  if (days < 30) return "Over 2 weeks ago";
+  if (days < 60) return "Over a month ago";
   return "Over 2 months ago";
 }
 
-const TIER_COLOR: Record<string, string> = {
-  T1: "bg-[var(--color-tier-t1)]",
-  T2: "bg-[var(--color-tier-t2)]",
-  T3: "bg-[var(--color-tier-t3)]",
-  T4: "bg-[var(--color-tier-t4)]",
+function visitAgoClass(dateStr: string | null, tier: string | null): string {
+  const days = daysSince(dateStr);
+  if (days === null) return "text-ink-300";
+  if (days <= 1) return "text-[var(--color-tier-t2-fg)] font-semibold";
+  const threshold = tier ? (OVERDUE_DAYS[tier] ?? 14) : 14;
+  if (days > threshold) return "text-[var(--color-status-bad-fg)] font-semibold";
+  if (days > threshold * 0.7) return "text-[var(--color-status-warn-fg)] font-semibold";
+  return "text-ink-400 font-medium";
+}
+
+const TIER_STYLE: Record<string, string> = {
+  T1: "bg-[var(--color-tier-t1-bg)] text-[var(--color-tier-t1-fg)]",
+  T2: "bg-[var(--color-tier-t2-bg)] text-[var(--color-tier-t2-fg)]",
+  T3: "bg-[var(--color-tier-t3-bg)] text-[var(--color-tier-t3-fg)]",
+  T4: "bg-[var(--color-tier-t4-bg)] text-[var(--color-tier-t4-fg)]",
 };
 
 export default function PortfolioPage() {
   const [data, setData] = useState<Portfolio | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    setDismissed(!!localStorage.getItem("sva-onboard-dismissed"));
     (async () => {
       const initData = await initTelegram();
-      if (!initData) {
-        setError("Open this from inside Telegram.");
-        return;
-      }
+      if (!initData) { setError("Open this from inside Telegram."); return; }
       const res = await fetch("/api/m/portfolio", {
         headers: { Authorization: `tma ${initData}` },
       });
@@ -63,40 +87,73 @@ export default function PortfolioPage() {
     })().catch((e) => setError(String(e)));
   }, []);
 
+  function dismiss() {
+    localStorage.setItem("sva-onboard-dismissed", "1");
+    setDismissed(true);
+  }
+
   if (error) {
     return (
       <main className="flex min-h-screen items-center justify-center p-6">
-        <p className="text-center text-base text-ink-400">{error}</p>
+        <p className="text-center text-sm text-ink-400">{error}</p>
       </main>
     );
   }
-
   if (!data) {
     return (
       <main className="flex min-h-screen items-center justify-center p-6">
-        <p className="text-center text-base text-ink-400">Loading…</p>
+        <p className="text-center text-sm text-ink-300">Loading…</p>
       </main>
     );
   }
 
+  const firstName = data.cm.name.split(" ")[0];
   const visited = data.stores.filter((s) => s.last_visit_date);
   const unvisited = data.stores.filter((s) => !s.last_visit_date);
 
   return (
-    <main className="min-h-screen p-4 pb-12">
-      <header className="mb-6 mt-2">
-        <h1 className="text-2xl font-bold">Hi {data.cm.name.split(" ")[0]}</h1>
-        <p className="text-sm text-ink-400">
+    <main className="min-h-screen pb-12">
+      {/* Header */}
+      <header className="bg-white border-b border-ink-100 px-4 pt-5 pb-4">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-300 mb-1">
+          Good day
+        </p>
+        <h1 className="text-[26px] font-extrabold leading-tight text-ink-700">
+          {firstName}
+        </h1>
+        <p className="text-xs text-ink-300 mt-0.5">
           {data.stores.length} stores · {data.cm.market}
         </p>
       </header>
 
+      {/* Onboarding banner — one-time */}
+      {!dismissed && (
+        <div className="mx-3.5 mt-3 rounded-2xl border border-[var(--color-tc-100)] bg-[var(--color-tc-50)] p-3.5">
+          <div className="flex gap-3 items-start">
+            <span className="text-lg mt-0.5">👋</span>
+            <div className="flex-1">
+              <p className="text-xs font-bold text-ink-700 mb-0.5">Getting started</p>
+              <p className="text-xs text-[var(--color-tc-600)] leading-relaxed">
+                Tap any store to see its visit history. Use <strong>/visit</strong> in the bot to log a new visit.
+              </p>
+              <button
+                onClick={dismiss}
+                className="mt-2 text-[11px] font-semibold text-[var(--color-tc-600)] bg-[var(--color-tc-100)] rounded-md px-2.5 py-1 cursor-pointer"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recently visited */}
       {visited.length > 0 && (
-        <section className="mb-6">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">
+        <section className="mt-4">
+          <h2 className="px-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-ink-300">
             Recently visited
           </h2>
-          <ul className="space-y-2">
+          <ul className="space-y-2 px-3.5">
             {visited.map((s) => (
               <StoreCard key={s.id} store={s} />
             ))}
@@ -104,12 +161,13 @@ export default function PortfolioPage() {
         </section>
       )}
 
+      {/* Never visited */}
       {unvisited.length > 0 && (
-        <section>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">
-            Not yet visited
+        <section className="mt-4">
+          <h2 className="px-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-ink-300">
+            Never visited
           </h2>
-          <ul className="space-y-2">
+          <ul className="space-y-2 px-3.5">
             {unvisited.map((s) => (
               <StoreCard key={s.id} store={s} />
             ))}
@@ -121,33 +179,39 @@ export default function PortfolioPage() {
 }
 
 function StoreCard({ store }: { store: PortfolioStore }) {
-  const tierClass = store.tier ? TIER_COLOR[store.tier] : "bg-ink-300";
+  const tierStyle = store.tier ? TIER_STYLE[store.tier] : TIER_STYLE.T4;
+  const agoClass = visitAgoClass(store.last_visit_date, store.tier);
+
   return (
     <li>
       <Link
         href={`/m/store/${store.id}`}
-        className="flex items-center gap-3 rounded-2xl border border-ink-100 bg-white p-3 shadow-sm active:bg-ink-50"
+        className="flex items-center gap-3 rounded-[18px] border border-ink-100 bg-white p-3.5 shadow-sm active:scale-[0.98] transition-transform"
       >
+        {/* Tier badge */}
         <span
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${tierClass}`}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[11px] font-extrabold ${tierStyle}`}
         >
           {store.tier ?? "—"}
         </span>
+
+        {/* Body */}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-semibold text-ink-700">
-            {store.name}
-          </p>
-          <p className="text-xs text-ink-400">
-            {daysAgo(store.last_visit_date)}
+          <p className="truncate text-sm font-bold text-ink-700">{store.name}</p>
+          <p className="text-[11px] text-ink-300 mt-0.5">{store.chain}</p>
+          <div className="flex items-center justify-between mt-1.5">
+            <span className={`text-[11px] ${agoClass}`}>
+              {lastVisitLabel(store.last_visit_date)}
+            </span>
             {store.visits_30d > 0 && (
-              <>
-                {" "}
-                · {store.visits_30d} in 30d
-              </>
+              <span className="text-[9px] font-bold bg-[var(--color-tc-50)] text-[var(--color-tc-600)] rounded-full px-2 py-0.5">
+                {store.visits_30d} in 30d
+              </span>
             )}
-          </p>
+          </div>
         </div>
-        <span className="text-ink-300">›</span>
+
+        <span className="text-ink-200 text-lg">›</span>
       </Link>
     </li>
   );

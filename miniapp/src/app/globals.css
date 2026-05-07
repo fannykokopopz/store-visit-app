@@ -1,25 +1,52 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-ink-50: #F7F7F8;
-  --color-ink-100: #ECECEE;
-  --color-ink-200: #D6D6DB;
-  --color-ink-300: #A8A8B0;
-  --color-ink-400: #6E6E78;
+  /* Warm neutrals */
+  --color-ink-50:  #FAF8F4;
+  --color-ink-100: #EDEDF0;
+  --color-ink-200: #D8D8DC;
+  --color-ink-300: #B0B0B8;
+  --color-ink-400: #6B6B74;
   --color-ink-500: #45454D;
-  --color-ink-700: #1F1F24;
+  --color-ink-700: #18181B;
 
-  --color-tc-50: #FFF6E5;
-  --color-tc-100: #FFE9BF;
-  --color-tc-200: #FFD485;
-  --color-tc-400: #FFB23A;
+  /* TC amber brand */
+  --color-tc-50:  #FEF6E4;
+  --color-tc-100: #FDDFA0;
+  --color-tc-200: #FBCA5C;
+  --color-tc-400: #F5A623;
   --color-tc-500: #E89211;
-  --color-tc-600: #B26C00;
+  --color-tc-600: #B86B00;
 
-  --color-tier-t1: #2B7DE9;
-  --color-tier-t2: #5A9A5A;
-  --color-tier-t3: #E89211;
-  --color-tier-t4: #6E6E78;
+  /* Tier badge pastels — bg / fg pairs */
+  --color-tier-t1-bg: #DDE9FB;
+  --color-tier-t1-fg: #1A5DB5;
+  --color-tier-t2-bg: #D6F0DC;
+  --color-tier-t2-fg: #1E7A3A;
+  --color-tier-t3-bg: #FEF3DC;
+  --color-tier-t3-fg: #B86B00;
+  --color-tier-t4-bg: #EDEDF0;
+  --color-tier-t4-fg: #555560;
+
+  /* Semantic pastels for visit sections */
+  --color-section-amber-bg: #FEF6E4;
+  --color-section-amber-border: #FDDFA0;
+  --color-section-blue-bg:   #EAF1FD;
+  --color-section-blue-border: #C4D9F8;
+  --color-section-green-bg:  #E7F5EA;
+  --color-section-green-border: #B8DEC0;
+  --color-section-pink-bg:   #FDE8F0;
+  --color-section-pink-border: #F5BDD5;
+  --color-section-purple-bg: #EDE8FD;
+  --color-section-purple-border: #CAB8F5;
+
+  /* Status colors */
+  --color-status-ok-bg:    #D6F0DC;
+  --color-status-ok-fg:    #1E7A3A;
+  --color-status-warn-bg:  #FEF3DC;
+  --color-status-warn-fg:  #B86B00;
+  --color-status-bad-bg:   #FCDEDE;
+  --color-status-bad-fg:   #B52020;
 
   --font-sans: "Inter", system-ui, sans-serif;
 }
