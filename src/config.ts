@@ -29,7 +29,4 @@ export const config = {
   resend: {
     apiKey: optional('RESEND_API_KEY'),
   },
-  miniapp: {
-    url: optional('MINIAPP_URL'),
-  },
 } as const;

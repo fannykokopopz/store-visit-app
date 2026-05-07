@@ -3,7 +3,6 @@ import { BotContext, requireAuth } from '../middleware/auth.js';
 import { getStoresForCM } from '../../db/queries/stores.js';
 import { getLastVisitDatePerStore, getRecentVisitsByCM } from '../../db/queries/visits.js';
 import { daysSince, daysSinceLabel } from '../../utils/format.js';
-import { config } from '../../config.js';
 
 const OVERDUE_DAYS: Record<string, number> = {
   T1: 7,
@@ -53,9 +52,6 @@ export async function buildProfileContent(telegramId: number, user: NonNullable<
   }
 
   const keyboard = new InlineKeyboard();
-  if (config.miniapp?.url) {
-    keyboard.webApp('📱 Open Mini-App', config.miniapp.url).row();
-  }
   if (stores.length > 0) {
     keyboard.text('📋 My Stores', 'profile:stores').text('🗓 Recent Visits', 'profile:visits');
   }
