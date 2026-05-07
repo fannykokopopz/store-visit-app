@@ -110,20 +110,74 @@ export default function PortfolioPage() {
   const firstName = data.cm.name.split(" ")[0];
   const visited = data.stores.filter((s) => s.last_visit_date);
   const unvisited = data.stores.filter((s) => !s.last_visit_date);
+  const visitedThisMonth = data.stores.filter((s) => s.visits_30d > 0).length;
+  const overdueCount = data.stores.filter((s) => {
+    const days = daysSince(s.last_visit_date);
+    if (days === null) return s.tier === "T1" || s.tier === "T2";
+    const threshold = s.tier ? (OVERDUE_DAYS[s.tier] ?? 14) : 14;
+    return days > threshold;
+  }).length;
 
   return (
     <main className="min-h-screen pb-12">
-      {/* Header */}
-      <header className="bg-white border-b border-ink-100 px-4 pt-5 pb-4">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-300 mb-1">
+      {/* Dark header */}
+      <header
+        className="px-4 pt-5 pb-5"
+        style={{ background: "linear-gradient(160deg, #1C1C22 0%, #26262F 100%)" }}
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40 mb-1">
           Good day
         </p>
-        <h1 className="text-[26px] font-extrabold leading-tight text-ink-700">
+        <h1 className="text-[28px] font-extrabold leading-tight text-white">
           {firstName}
         </h1>
-        <p className="text-xs text-ink-300 mt-0.5">
+        <p className="text-xs text-white/40 mt-0.5">
           {data.stores.length} stores · {data.cm.market}
         </p>
+
+        {/* Stats row — only shown when there's something to show */}
+        {(visitedThisMonth > 0 || overdueCount > 0) && (
+          <div className="flex gap-2 mt-4">
+            <div
+              className="flex-1 rounded-xl px-3 py-2.5"
+              style={{ background: "rgba(255,255,255,0.08)" }}
+            >
+              <div className="text-xl font-extrabold text-white leading-none">
+                {visitedThisMonth}
+              </div>
+              <div className="text-[9px] font-semibold uppercase tracking-wide text-white/40 mt-1">
+                Visited this month
+              </div>
+            </div>
+            <div
+              className="flex-1 rounded-xl px-3 py-2.5"
+              style={{ background: "rgba(255,255,255,0.08)" }}
+            >
+              <div className="text-xl font-extrabold text-white leading-none">
+                {data.stores.length}
+              </div>
+              <div className="text-[9px] font-semibold uppercase tracking-wide text-white/40 mt-1">
+                Total stores
+              </div>
+            </div>
+            {overdueCount > 0 && (
+              <div
+                className="flex-1 rounded-xl px-3 py-2.5"
+                style={{ background: "rgba(181,32,32,0.25)" }}
+              >
+                <div className="text-xl font-extrabold leading-none" style={{ color: "#FF8080" }}>
+                  {overdueCount}
+                </div>
+                <div
+                  className="text-[9px] font-semibold uppercase tracking-wide mt-1"
+                  style={{ color: "rgba(255,128,128,0.6)" }}
+                >
+                  Overdue
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       {/* Onboarding banner — one-time */}
