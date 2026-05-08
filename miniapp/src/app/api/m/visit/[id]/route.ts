@@ -1,7 +1,7 @@
 import { authedCMFromRequest } from "@/lib/miniapp-auth";
 import { getFullVisitForCM, signPhotoUrls, updateVisitText } from "@/lib/queries";
 
-const TEXT_FIELDS = ["good_news", "competitors", "display_stock", "follow_up", "buzz_plan"] as const;
+const TEXT_FIELDS = ["good_news", "competitors", "display_stock", "follow_up", "buzz_plan", "training"] as const;
 
 export async function GET(
   req: Request,

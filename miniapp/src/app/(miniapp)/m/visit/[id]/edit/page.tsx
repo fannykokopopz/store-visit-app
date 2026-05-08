@@ -16,11 +16,12 @@ interface FullVisit {
   display_stock: string | null;
   follow_up: string | null;
   buzz_plan: string | null;
+  training: string | null;
   photo_count: number;
   is_locked: boolean;
 }
 
-type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan";
+type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan" | "training";
 
 const SECTIONS: Array<{
   key: SectionKey;
@@ -70,6 +71,14 @@ const SECTIONS: Array<{
     titleClass: "text-[#5B2DB5]",
     placeholder: "Planned activities, events, or engagement ideas for this store…",
   },
+  {
+    key: "training",
+    label: "Training",
+    icon: "🎓",
+    colorClass: "bg-[var(--color-section-teal-bg)] border-[var(--color-section-teal-border)]",
+    titleClass: "text-[var(--color-section-teal-fg)]",
+    placeholder: "Who did you train? What product or skill did you cover?",
+  },
 ];
 
 function fmtDate(dateStr: string): string {
@@ -97,6 +106,7 @@ export default function EditVisitPage({
     display_stock: "",
     follow_up: "",
     buzz_plan: "",
+    training: "",
   });
   const [initDataStr, setInitDataStr] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +138,7 @@ export default function EditVisitPage({
         display_stock: data.visit.display_stock ?? "",
         follow_up: data.visit.follow_up ?? "",
         buzz_plan: data.visit.buzz_plan ?? "",
+        training: data.visit.training ?? "",
       });
     })().catch((e) => setError(String(e)));
   }, [id]);

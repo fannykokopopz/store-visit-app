@@ -23,6 +23,7 @@ export interface VisitSummary {
   display_stock: string | null;
   follow_up: string | null;
   buzz_plan: string | null;
+  training: string | null;
   photo_count: number;
   thumb_urls: string[];
 }
@@ -113,7 +114,7 @@ export async function getStoreTimelineForCM(
     supabase
       .from("visits")
       .select(
-        "id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan",
+        "id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training",
       )
       .eq("cm_telegram_id", telegramId)
       .eq("store_id", storeId)
@@ -195,6 +196,7 @@ export async function getFullVisitForCM(
     display_stock: v.display_stock,
     follow_up: v.follow_up,
     buzz_plan: v.buzz_plan,
+    training: v.training,
     store_id: v.store_id,
     store_name: v.stores?.name ?? "Unknown store",
     cm_telegram_id: v.cm_telegram_id,
@@ -210,7 +212,7 @@ export async function getFullVisitForCM(
 export async function updateVisitText(
   telegramId: number,
   visitId: string,
-  fields: Partial<Pick<FullVisit, "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan">>,
+  fields: Partial<Pick<FullVisit, "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan" | "training">>,
 ): Promise<boolean> {
   const { error } = await supabase
     .from("visits")

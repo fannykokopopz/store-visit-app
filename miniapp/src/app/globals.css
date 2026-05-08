@@ -39,6 +39,9 @@
   --color-section-pink-border: #F5BDD5;
   --color-section-purple-bg: #EDE8FD;
   --color-section-purple-border: #CAB8F5;
+  --color-section-teal-bg:    #E4F5F6;
+  --color-section-teal-border: #96D5DA;
+  --color-section-teal-fg:    #0A7A84;
 
   /* Status colors */
   --color-status-ok-bg:    #D6F0DC;

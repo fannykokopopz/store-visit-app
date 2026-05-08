@@ -11,6 +11,7 @@ export interface Visit {
   display_stock: string | null;
   follow_up: string | null;
   buzz_plan: string | null;
+  training: string | null;
   is_locked: boolean;
   locked_at: string | null;
   submitted_at: string | null;
@@ -47,6 +48,7 @@ export async function attachVisitSections(
       display_stock: sections.displayStock,
       follow_up: sections.followUp,
       buzz_plan: sections.buzzPlan,
+      training: sections.training,
     })
     .eq('id', visitId);
 
@@ -205,6 +207,7 @@ export async function updateVisitSections(
       display_stock: sections.displayStock,
       follow_up: sections.followUp,
       buzz_plan: sections.buzzPlan,
+      training: sections.training,
       edited_at: new Date().toISOString(),
     })
     .eq('id', visitId);
