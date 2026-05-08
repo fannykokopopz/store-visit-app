@@ -1,8 +1,7 @@
 import { BotContext } from '../middleware/auth.js';
-import { config } from '../../config.js';
 
 export async function handleDashboard(ctx: BotContext): Promise<void> {
-  const url = config.dashboard.url;
+  const url = process.env.DASHBOARD_URL;
   if (!url) {
     await ctx.reply('Dashboard URL not configured yet. Ask your admin to set it up.');
     return;
