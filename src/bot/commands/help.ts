@@ -11,13 +11,17 @@ export async function handleHelp(ctx: BotContext): Promise<void> {
     : '';
 
   await ctx.reply(
-    `Here's what I can do 👇\n\n` +
-    `🏪 /visit — log a store visit\n` +
+    `📱 *Commands*\n\n` +
+    `🏪 /visit — log a new store visit\n` +
     `📊 /dashboard — open the team dashboard\n` +
     `✏️ /nickname — set your display name\n` +
     `🚫 /cancel — stop what you're doing\n` +
     adminBlock + `\n` +
-    `💡 *Quick tip:* When you /visit, you'll get a 6-section template — Good News, Competitors, Display & Stock, Follow Up, Buzz Plan, Training. Fill in what you can. Names, numbers, and specifics make your notes 10× more useful.`,
+    `📝 *How the visit template works*\n\n` +
+    `You'll get 6 sections to fill in:\n` +
+    `🌟 Good News · 🔍 Competitors · 📦 Display & Stock\n` +
+    `✅ Follow Up · ⚡ Buzz Plan · 🎓 Training\n\n` +
+    `💡 _Names, numbers, and specifics make your notes 10× more useful._`,
     { parse_mode: 'Markdown' },
   );
 }

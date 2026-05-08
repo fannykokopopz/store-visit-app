@@ -1,19 +1,19 @@
-export const VISIT_TEMPLATE = `1️⃣ Good News
+export const VISIT_TEMPLATE = `🌟 Good News
 
 
-2️⃣ Competitors' Insights
+🔍 Competitors' Insights
 
 
-3️⃣ Display & Stock
+📦 Display & Stock
 
 
-4️⃣ What to Follow Up
+✅ What to Follow Up
 
 
-5️⃣ Buzz Plan
+⚡ Buzz Plan
 
 
-6️⃣ Training
+🎓 Training
 
 
 `;
@@ -23,9 +23,10 @@ export function buildTemplateMessage(storeName: string): string {
     day: '2-digit', month: 'short', year: 'numeric',
   });
   return (
-    `📋 *${storeName} — ${date}*\n\n` +
-    `Fill in what you can — even quick notes help the team 💪\n` +
-    `Copy the template, fill it in, and send it back\\. Photos? Add them to the same message 📸\n\n` +
+    `📋 *${storeName}*\n` +
+    `📅 ${date}\n\n` +
+    `Copy, fill in what you can, and send it back 💪\n` +
+    `Photos? Attach them to the same message 📸\n\n` +
     `\`\`\`\n${VISIT_TEMPLATE}\`\`\``
   );
 }

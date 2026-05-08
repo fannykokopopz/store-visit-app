@@ -8,12 +8,12 @@ export interface ParsedSections {
 }
 
 const SECTION_HEADERS: Array<{ key: keyof ParsedSections; pattern: RegExp }> = [
-  { key: 'goodNews',     pattern: /(?:^|\n)[ \t]*(?:1️⃣|1\.)[ \t]+Good\s+News\b[^\n]*/i },
-  { key: 'competitors',  pattern: /(?:^|\n)[ \t]*(?:2️⃣|2\.)[ \t]+Competitors['']?[ \t]*Insights?\b[^\n]*/i },
-  { key: 'displayStock', pattern: /(?:^|\n)[ \t]*(?:3️⃣|3\.)[ \t]+Display[ \t]*[&+][ \t]*Stock\b[^\n]*/i },
-  { key: 'followUp',     pattern: /(?:^|\n)[ \t]*(?:4️⃣|4\.)[ \t]+What[ \t]+to[ \t]+Follow[ \t]+Up\b[^\n]*/i },
-  { key: 'buzzPlan',     pattern: /(?:^|\n)[ \t]*(?:5️⃣|5\.)[ \t]+Buzz[ \t]+Plan\b[^\n]*/i },
-  { key: 'training',     pattern: /(?:^|\n)[ \t]*(?:6️⃣|6\.)[ \t]+Training\b[^\n]*/i },
+  { key: 'goodNews',     pattern: /(?:^|\n)[ \t]*(?:1️⃣|🌟|1\.)[ \t]+Good\s+News\b[^\n]*/i },
+  { key: 'competitors',  pattern: /(?:^|\n)[ \t]*(?:2️⃣|🔍|2\.)[ \t]+Competitors['']?[ \t]*Insights?\b[^\n]*/i },
+  { key: 'displayStock', pattern: /(?:^|\n)[ \t]*(?:3️⃣|📦|3\.)[ \t]+Display[ \t]*[&+][ \t]*Stock\b[^\n]*/i },
+  { key: 'followUp',     pattern: /(?:^|\n)[ \t]*(?:4️⃣|✅|4\.)[ \t]+What[ \t]+to[ \t]+Follow[ \t]+Up\b[^\n]*/i },
+  { key: 'buzzPlan',     pattern: /(?:^|\n)[ \t]*(?:5️⃣|⚡|5\.)[ \t]+Buzz[ \t]+Plan\b[^\n]*/i },
+  { key: 'training',     pattern: /(?:^|\n)[ \t]*(?:6️⃣|🎓|6\.)[ \t]+Training\b[^\n]*/i },
 ];
 
 export function parseTemplate(text: string): ParsedSections {

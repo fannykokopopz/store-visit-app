@@ -7,12 +7,12 @@ const SECTION_DEFS: Array<{
   label: string;
   emoji: string;
 }> = [
-  { key: 'good_news',     label: 'Good News',              emoji: '1️⃣' },
-  { key: 'competitors',   label: "Competitors' Insights",  emoji: '2️⃣' },
-  { key: 'display_stock', label: 'Display & Stock',        emoji: '3️⃣' },
-  { key: 'follow_up',     label: 'What to Follow Up',      emoji: '4️⃣' },
-  { key: 'buzz_plan',     label: 'Buzz Plan',              emoji: '5️⃣' },
-  { key: 'training',      label: 'Training',               emoji: '6️⃣' },
+  { key: 'good_news',     label: 'Good News',              emoji: '🌟' },
+  { key: 'competitors',   label: "Competitors' Insights",  emoji: '🔍' },
+  { key: 'display_stock', label: 'Display & Stock',        emoji: '📦' },
+  { key: 'follow_up',     label: 'What to Follow Up',      emoji: '✅' },
+  { key: 'buzz_plan',     label: 'Buzz Plan',              emoji: '⚡' },
+  { key: 'training',      label: 'Training',               emoji: '🎓' },
 ];
 
 const TG_CAPTION_LIMIT = 1000; // Telegram caps at 1024; leave headroom for markdown overhead
@@ -38,7 +38,7 @@ export async function sendVisitDetails(ctx: Context, visitId: string): Promise<v
     day: '2-digit', month: 'short', year: 'numeric',
   });
 
-  const lines: string[] = [`📋 *${visit.store_name} — ${date}*`, ''];
+  const lines: string[] = [`🏪 *${visit.store_name}*`, `📅 ${date}`, ''];
   let anyFilled = false;
   for (const { key, label, emoji } of SECTION_DEFS) {
     const val = visit[key];

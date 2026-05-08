@@ -17,15 +17,25 @@ function lastVisitLabel(storeId: string, lastVisits: Record<string, string>): st
   return `${days}d ago`;
 }
 
+function statusIcon(storeId: string, lastVisits: Record<string, string>): string {
+  const date = lastVisits[storeId];
+  if (!date) return '⚪';
+  const days = daysSince(date);
+  if (days <= 1) return '✅';
+  if (days <= 7) return '🟢';
+  return '🟡';
+}
+
 export function buildStoreContextMessage(
   stores: Store[],
   lastVisits: Record<string, string> = {},
 ): string {
   const lines = stores.map(s => {
+    const icon = statusIcon(s.id, lastVisits);
     const label = lastVisitLabel(s.id, lastVisits);
-    return `${s.name} · ${label}`;
+    return `${icon} ${s.name} · ${label}`;
   });
-  return `Your stores 🏪\n\n${lines.join('\n')}`;
+  return `🏪 Your stores\n\n${lines.join('\n')}`;
 }
 
 export function buildStorePicker(

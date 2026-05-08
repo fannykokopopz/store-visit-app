@@ -118,9 +118,9 @@ export function createBot(): Bot<BotContext> {
     startEditSession(ctx.from.id, visitId, info.store_name);
     await ctx.answerCallbackQuery();
     await ctx.reply(
-      `Send your updated notes for *${info.store_name}* and I'll swap them in 🔄\n\n` +
-      `\`\`\`\n1️⃣ Good News\n\n\n2️⃣ Competitors' Insights\n\n\n3️⃣ Display & Stock\n\n\n4️⃣ What to Follow Up\n\n\n5️⃣ Buzz Plan\n\n\n6️⃣ Training\n\`\`\`\n\n/cancel to stop\\.`,
-      { parse_mode: 'MarkdownV2' },
+      `✏️ *Editing — ${info.store_name}*\n\nSend your updated notes and I'll swap them in 🔄\n\n` +
+      `\`\`\`\n🌟 Good News\n\n\n🔍 Competitors' Insights\n\n\n📦 Display & Stock\n\n\n✅ What to Follow Up\n\n\n⚡ Buzz Plan\n\n\n🎓 Training\n\`\`\`\n\n_/cancel to stop_`,
+      { parse_mode: 'Markdown' },
     );
   });
 

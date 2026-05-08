@@ -12,11 +12,13 @@ export async function handleStart(ctx: BotContext): Promise<void> {
   }
 
   await ctx.reply(
-    `Hey ${name}! 👋\n\n` +
-    `This is your store visit sidekick. Log a visit in under 2 minutes, right from here.\n\n` +
+    `Hey ${name}! 👋 Good to see you.\n\n` +
+    `*Your store visit companion.* Log a visit in under 2 min, right from here 🚀\n\n` +
     `🏪 /visit — log a store visit\n` +
-    `📊 /dashboard — open the team dashboard\n` +
+    `📊 /dashboard — team dashboard\n` +
+    `✏️ /nickname — change your name\n` +
     `❓ /help — how it all works\n\n` +
-    `You're set up as ${ctx.user.role.toUpperCase()} · ${ctx.user.market} ✅`,
+    `You're in as *${ctx.user.role.toUpperCase()} · ${ctx.user.market}* ✅`,
+    { parse_mode: 'Markdown' },
   );
 }

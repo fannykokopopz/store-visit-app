@@ -82,17 +82,19 @@ async function finalizeCollection(telegramId: number): Promise<void> {
   }
 
   const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  const lines = [
-    `📋 *Visit log — ${collection.storeName}*`,
-    `📅 ${date}`,
-  ];
-  if (uploaded > 0) lines.push(`📸 ${uploaded} photo(s)`);
+  const meta: string[] = [`📅 ${date}`, `📝 ${collection.sections}/6 sections`];
+  if (uploaded > 0) meta.push(`📸 ${uploaded} photo${uploaded === 1 ? '' : 's'}`);
 
-  await botApi.sendMessage(telegramId, lines.join('\n'), {
+  const text =
+    `🏪 *${collection.storeName}*\n` +
+    `${meta.join('  ·  ')}\n\n` +
+    `_Looks good? Confirm to lock it in — or edit if something's off._`;
+
+  await botApi.sendMessage(telegramId, text, {
     parse_mode: 'Markdown',
     reply_markup: new InlineKeyboard()
       .text('✅ Confirm', `confirm_visit:${collection.visitId}`).row()
-      .text('✏️ Edit notes', `edit:${collection.visitId}`)
+      .text('✏️ Edit', `edit:${collection.visitId}`)
       .text('🗑️ Delete', `delete:${collection.visitId}`),
   });
 }
