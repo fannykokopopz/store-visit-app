@@ -1,0 +1,26 @@
+{
+  "name": "tc-sva-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TC Store Visit App — AM/IC Dashboard",
+  "engines": { "node": ">=20.9.0" },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start -p ${PORT:-3000}"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.104.1",
+    "next": "16.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

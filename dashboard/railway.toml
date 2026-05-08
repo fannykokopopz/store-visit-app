@@ -1,0 +1,7 @@
+[build]
+builder = "nixpacks"
+watchPatterns = ["dashboard/**"]
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/api/health"
