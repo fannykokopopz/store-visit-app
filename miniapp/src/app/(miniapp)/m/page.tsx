@@ -120,58 +120,43 @@ export default function PortfolioPage() {
 
   return (
     <main className="min-h-screen pb-12">
-      {/* Dark header */}
-      <header
-        className="px-4 pt-5 pb-5"
-        style={{ background: "linear-gradient(160deg, #1F1C18 0%, #2D2924 100%)" }}
-      >
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40 mb-1">
+      {/* Header */}
+      <header className="bg-white border-b border-ink-100 px-4 pt-5 pb-5">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-300 mb-1">
           Good day
         </p>
-        <h1 className="text-[28px] font-extrabold leading-tight text-white">
+        <h1 className="text-[28px] font-extrabold leading-tight text-ink-700">
           {firstName}
         </h1>
-        <p className="text-xs text-white/40 mt-0.5">
+        <p className="text-xs text-ink-300 mt-0.5">
           {data.stores.length} stores · {data.cm.market}
         </p>
 
-        {/* Stats row — only shown when there's something to show */}
+        {/* Stats row */}
         {(visitedThisMonth > 0 || overdueCount > 0) && (
           <div className="flex gap-2 mt-4">
-            <div
-              className="flex-1 rounded-xl px-3 py-2.5"
-              style={{ background: "rgba(255,255,255,0.08)" }}
-            >
-              <div className="text-xl font-extrabold text-white leading-none">
+            <div className="flex-1 rounded-xl bg-ink-50 px-3 py-2.5">
+              <div className="text-xl font-extrabold text-ink-700 leading-none">
                 {visitedThisMonth}
               </div>
-              <div className="text-[9px] font-semibold uppercase tracking-wide text-white/40 mt-1">
+              <div className="text-[9px] font-semibold uppercase tracking-wide text-ink-300 mt-1">
                 Visited this month
               </div>
             </div>
-            <div
-              className="flex-1 rounded-xl px-3 py-2.5"
-              style={{ background: "rgba(255,255,255,0.08)" }}
-            >
-              <div className="text-xl font-extrabold text-white leading-none">
+            <div className="flex-1 rounded-xl bg-ink-50 px-3 py-2.5">
+              <div className="text-xl font-extrabold text-ink-700 leading-none">
                 {data.stores.length}
               </div>
-              <div className="text-[9px] font-semibold uppercase tracking-wide text-white/40 mt-1">
+              <div className="text-[9px] font-semibold uppercase tracking-wide text-ink-300 mt-1">
                 Total stores
               </div>
             </div>
             {overdueCount > 0 && (
-              <div
-                className="flex-1 rounded-xl px-3 py-2.5"
-                style={{ background: "rgba(181,32,32,0.25)" }}
-              >
-                <div className="text-xl font-extrabold leading-none" style={{ color: "#FF8080" }}>
+              <div className="flex-1 rounded-xl px-3 py-2.5" style={{ background: "#FFF0F3" }}>
+                <div className="text-xl font-extrabold leading-none text-[#C0185A]">
                   {overdueCount}
                 </div>
-                <div
-                  className="text-[9px] font-semibold uppercase tracking-wide mt-1"
-                  style={{ color: "rgba(255,128,128,0.6)" }}
-                >
+                <div className="text-[9px] font-semibold uppercase tracking-wide mt-1 text-[#E07090]">
                   Overdue
                 </div>
               </div>
