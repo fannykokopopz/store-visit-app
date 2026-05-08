@@ -14,11 +14,12 @@ export async function handleHelp(ctx: BotContext): Promise<void> {
     `📱 *Commands*\n\n` +
     `📍 /visit — log a new store visit\n` +
     `👤 /myprofile — your profile, stores & recent visits\n` +
+    `📊 /dashboard — open the AM dashboard\n` +
     `🚫 /cancel — stop what you're doing\n` +
     `❓ /help — show this\n` +
     adminBlock + `\n` +
     `📝 *How to write great visit notes*\n\n` +
-    `You'll get a 5-section template. Here's what goes in each:\n\n` +
+    `You'll get a 6-section template. Here's what goes in each:\n\n` +
     `🌟 *Good News*\n` +
     `Wins, great staff moments, strong sales.\n` +
     `_e.g. "Aisyah upsold a Sonos Move to a walk-in today."_\n\n` +
@@ -34,6 +35,9 @@ export async function handleHelp(ctx: BotContext): Promise<void> {
     `⚡ *Buzz Plan*\n` +
     `Your tactic for driving sales at this store.\n` +
     `_e.g. "Offered the team a dinner if they hit 10K this month."_\n\n` +
+    `🎓 *Training*\n` +
+    `Who you trained and what you covered.\n` +
+    `_e.g. "Wei Jie — Kilburn III demo and upsell script."_\n\n` +
     `💡 *Tip:* Names, models, and numbers make your notes 10x more useful.`,
     { parse_mode: 'Markdown' },
   );

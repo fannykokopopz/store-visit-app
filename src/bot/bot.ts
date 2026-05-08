@@ -9,6 +9,7 @@ import { handleCancel } from './commands/cancel.js';
 import { handleGrantAccess } from './commands/admin/grant.js';
 import { handleRevokeAccess } from './commands/admin/revoke.js';
 import { handleListAccess } from './commands/admin/list.js';
+import { handleDashboard } from './commands/dashboard.js';
 import { visitFlow } from './conversations/visit-flow.js';
 import { initPhotoCollection, isCollecting, handleIncomingPhoto } from './photo-collection.js';
 import { startEditSession, isEditing, getEditSession, clearEditSession } from './edit-session.js';
@@ -30,6 +31,8 @@ export function createBot(): Bot<BotContext> {
   bot.command('help', handleHelp);
   bot.command('myprofile', handleMyProfile);
   bot.command('cancel', handleCancel);
+
+  bot.command('dashboard', handleDashboard);
 
   bot.command('visit', async (ctx) => {
     const user = requireAuth(ctx);
@@ -67,7 +70,7 @@ export function createBot(): Bot<BotContext> {
     const ok = await updateVisitSections(session.visitId, sections);
 
     if (ok) {
-      await ctx.reply(`✅ Visit updated — ${session.storeName}\n📝 ${filled}/5 sections filled`);
+      await ctx.reply(`✅ Visit updated — ${session.storeName}\n📝 ${filled}/6 sections filled`);
     } else {
       await ctx.reply('Something went wrong updating your visit. Please try again.');
     }
@@ -116,7 +119,7 @@ export function createBot(): Bot<BotContext> {
     await ctx.answerCallbackQuery();
     await ctx.reply(
       `Send your updated notes for *${info.store_name}* and I'll replace the current entry\\.\n\n` +
-      `\`\`\`\n1️⃣ Good News\n\n\n2️⃣ Competitors' Insights\n\n\n3️⃣ Display & Stock\n\n\n4️⃣ What to Follow Up\n\n\n5️⃣ Buzz Plan\n\`\`\`\n\nType /cancel to abort\\.`,
+      `\`\`\`\n1️⃣ Good News\n\n\n2️⃣ Competitors' Insights\n\n\n3️⃣ Display & Stock\n\n\n4️⃣ What to Follow Up\n\n\n5️⃣ Buzz Plan\n\n\n6️⃣ Training\n\`\`\`\n\nType /cancel to abort\\.`,
       { parse_mode: 'MarkdownV2' },
     );
   });

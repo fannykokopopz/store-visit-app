@@ -29,4 +29,7 @@ export const config = {
   resend: {
     apiKey: optional('RESEND_API_KEY'),
   },
+  dashboard: {
+    url: optional('DASHBOARD_URL'),
+  },
 } as const;
