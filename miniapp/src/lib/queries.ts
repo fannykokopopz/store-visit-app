@@ -192,6 +192,32 @@ export async function getFullVisitForCM(
   };
 }
 
+export async function updateVisitText(
+  telegramId: number,
+  visitId: string,
+  fields: Partial<Pick<FullVisit, "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan">>,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from("visits")
+    .update({ ...fields, edited_at: new Date().toISOString() })
+    .eq("id", visitId)
+    .eq("cm_telegram_id", telegramId);
+  return !error;
+}
+
+export async function insertVisitPhoto(
+  visitId: string,
+  storagePath: string,
+  fileSize?: number,
+): Promise<boolean> {
+  const { error } = await supabase.from("visit_photos").insert({
+    visit_id: visitId,
+    storage_path: storagePath,
+    ...(fileSize !== undefined && { file_size: fileSize }),
+  });
+  return !error;
+}
+
 export async function signPhotoUrls(
   paths: string[],
   ttlSec = 300,
