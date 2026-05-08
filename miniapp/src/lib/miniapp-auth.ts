@@ -76,6 +76,7 @@ export function readInitDataHeader(req: Request): string | null {
 export interface AuthedCM {
   telegram_id: number;
   full_name: string;
+  nickname: string | null;
   role: "cm" | "cmic" | "am" | "admin";
   market: "SG" | "TH" | "MY" | "HK";
 }
@@ -91,7 +92,7 @@ export async function authedCMFromRequest(
   const { supabase } = await import("./supabase");
   const { data, error } = await supabase
     .from("cms")
-    .select("telegram_id, full_name, role, market")
+    .select("telegram_id, full_name, nickname, role, market")
     .eq("telegram_id", verified.user.id)
     .eq("is_active", true)
     .single();

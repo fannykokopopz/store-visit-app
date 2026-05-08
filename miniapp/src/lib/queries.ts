@@ -24,8 +24,31 @@ export interface VisitSummary {
   follow_up: string | null;
   buzz_plan: string | null;
   training: string | null;
+  cm_name?: string | null;   // populated when allCMs=true
   photo_count: number;
-  thumb_urls: string[];
+  thumb_urls: string[];      // first 3, for list view
+  photo_urls?: string[];     // all photos, for gallery view
+}
+
+export interface AllMarketStore extends Store {
+  last_visit_date: string | null;
+  last_visit_cm: string | null;
+}
+
+export interface SearchResult {
+  id: string;
+  visit_date: string;
+  store_id: string;
+  store_name: string;
+  store_chain: string;
+  store_tier: Store["tier"];
+  cm_name: string;
+  good_news: string | null;
+  competitors: string | null;
+  display_stock: string | null;
+  follow_up: string | null;
+  buzz_plan: string | null;
+  training: string | null;
 }
 
 export interface FullVisit extends VisitSummary {
@@ -108,26 +131,33 @@ export async function getPortfolioForCM(
 export async function getStoreTimelineForCM(
   telegramId: number,
   storeId: string,
+  options?: { allCMs?: boolean },
 ): Promise<{ store: Store | null; visits: VisitSummary[] }> {
   const [storeRes, visitsRes] = await Promise.all([
     supabase.from("stores").select("*").eq("id", storeId).single(),
-    supabase
-      .from("visits")
-      .select(
-        "id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training",
-      )
-      .eq("cm_telegram_id", telegramId)
-      .eq("store_id", storeId)
-      .eq("is_locked", true)
-      .order("visit_date", { ascending: false }),
+    options?.allCMs
+      ? supabase
+          .from("visits")
+          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, cm_telegram_id, cms(full_name, nickname)")
+          .eq("store_id", storeId)
+          .eq("is_locked", true)
+          .order("visit_date", { ascending: false })
+      : supabase
+          .from("visits")
+          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training")
+          .eq("cm_telegram_id", telegramId)
+          .eq("store_id", storeId)
+          .eq("is_locked", true)
+          .order("visit_date", { ascending: false }),
   ]);
 
   const store = (storeRes.data as Store | null) ?? null;
-  const visitRows = (visitsRes.data ?? []) as Omit<VisitSummary, "photo_count" | "thumb_urls">[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visitRows = (visitsRes.data ?? []) as any[];
 
   if (visitRows.length === 0) return { store, visits: [] };
 
-  const ids = visitRows.map((v) => v.id);
+  const ids = visitRows.map((v: any) => v.id); // eslint-disable-line @typescript-eslint/no-explicit-any
   const { data: photoRows } = await supabase
     .from("visit_photos")
     .select("visit_id, storage_path")
@@ -135,30 +165,147 @@ export async function getStoreTimelineForCM(
     .order("created_at");
 
   const countByVisit = new Map<string, number>();
+  const allPathsByVisit = new Map<string, string[]>();
   const thumbPathsByVisit = new Map<string, string[]>();
+
   for (const p of photoRows ?? []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const row = p as any;
     const vid = row.visit_id as string;
     const path = row.storage_path as string;
     countByVisit.set(vid, (countByVisit.get(vid) ?? 0) + 1);
-    const existing = thumbPathsByVisit.get(vid) ?? [];
-    if (existing.length < 3) { existing.push(path); thumbPathsByVisit.set(vid, existing); }
+    const all = allPathsByVisit.get(vid) ?? [];
+    all.push(path);
+    allPathsByVisit.set(vid, all);
+    const thumbs = thumbPathsByVisit.get(vid) ?? [];
+    if (thumbs.length < 3) { thumbs.push(path); thumbPathsByVisit.set(vid, thumbs); }
   }
 
-  // Sign all thumbnail paths in one batch
-  const allThumbPaths = [...thumbPathsByVisit.values()].flat();
-  const signedUrls = await signPhotoUrls(allThumbPaths);
+  // Sign all photo paths in one batch
+  const allPaths = [...allPathsByVisit.values()].flat();
+  const signedUrls = await signPhotoUrls(allPaths);
   const signedMap = new Map<string, string>();
-  allThumbPaths.forEach((p, i) => { if (signedUrls[i]) signedMap.set(p, signedUrls[i]); });
+  allPaths.forEach((p, i) => { if (signedUrls[i]) signedMap.set(p, signedUrls[i]); });
 
-  const visits: VisitSummary[] = visitRows.map((v) => ({
-    ...v,
+  const visits: VisitSummary[] = visitRows.map((v: any) => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
+    id: v.id,
+    visit_date: v.visit_date,
+    good_news: v.good_news ?? null,
+    competitors: v.competitors ?? null,
+    display_stock: v.display_stock ?? null,
+    follow_up: v.follow_up ?? null,
+    buzz_plan: v.buzz_plan ?? null,
+    training: v.training ?? null,
+    cm_name: options?.allCMs ? (v.cms?.nickname ?? v.cms?.full_name ?? null) : undefined,
     photo_count: countByVisit.get(v.id) ?? 0,
     thumb_urls: (thumbPathsByVisit.get(v.id) ?? []).map((p) => signedMap.get(p) ?? "").filter(Boolean),
+    photo_urls: (allPathsByVisit.get(v.id) ?? []).map((p) => signedMap.get(p) ?? "").filter(Boolean),
   }));
 
   return { store, visits };
+}
+
+export async function getAllStoresInMarket(market: string): Promise<AllMarketStore[]> {
+  const { data: storeRows } = await supabase
+    .from("stores")
+    .select("*")
+    .eq("market", market)
+    .eq("is_active", true)
+    .order("name");
+
+  if (!storeRows || storeRows.length === 0) return [];
+
+  const storeIds = storeRows.map((s: any) => s.id); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: visitRows } = await supabase
+    .from("visits")
+    .select("store_id, visit_date, cms(full_name, nickname)")
+    .in("store_id", storeIds)
+    .eq("is_locked", true)
+    .order("visit_date", { ascending: false });
+
+  const lastVisitByStore = new Map<string, { date: string; cm_name: string }>();
+  for (const v of visitRows ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = v as any;
+    if (!lastVisitByStore.has(row.store_id)) {
+      lastVisitByStore.set(row.store_id, {
+        date: row.visit_date,
+        cm_name: row.cms?.nickname ?? row.cms?.full_name ?? "Unknown",
+      });
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return storeRows.map((s: any) => ({
+    ...(s as Store),
+    last_visit_date: lastVisitByStore.get(s.id)?.date ?? null,
+    last_visit_cm: lastVisitByStore.get(s.id)?.cm_name ?? null,
+  })).sort((a, b) => {
+    if (a.last_visit_date && b.last_visit_date) return b.last_visit_date.localeCompare(a.last_visit_date);
+    if (a.last_visit_date) return -1;
+    if (b.last_visit_date) return 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+export async function searchVisitsInMarket(
+  market: string,
+  query: string,
+  section?: string,
+): Promise<SearchResult[]> {
+  const { data: storeRows } = await supabase
+    .from("stores")
+    .select("id, name, chain, tier")
+    .eq("market", market)
+    .eq("is_active", true);
+
+  if (!storeRows || storeRows.length === 0) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const storeMap = new Map(storeRows.map((s: any) => [s.id, s]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const storeIds = storeRows.map((s: any) => s.id);
+
+  const sections = ["good_news", "competitors", "display_stock", "follow_up", "buzz_plan", "training"];
+  const validSection = section && sections.includes(section) ? section : null;
+
+  const baseQuery = supabase
+    .from("visits")
+    .select("id, visit_date, store_id, good_news, competitors, display_stock, follow_up, buzz_plan, training, cms(full_name, nickname)")
+    .in("store_id", storeIds)
+    .eq("is_locked", true)
+    .order("visit_date", { ascending: false })
+    .limit(50);
+
+  const { data: visitRows } = await (validSection
+    ? baseQuery.ilike(validSection, `%${query}%`)
+    : baseQuery.or(sections.map((s) => `${s}.ilike.%${query}%`).join(",")));
+
+  return (visitRows ?? []).map((v: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    const store = storeMap.get(v.store_id) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    return {
+      id: v.id,
+      visit_date: v.visit_date,
+      store_id: v.store_id,
+      store_name: store?.name ?? "Unknown",
+      store_chain: store?.chain ?? "",
+      store_tier: store?.tier ?? null,
+      cm_name: v.cms?.nickname ?? v.cms?.full_name ?? "Unknown",
+      good_news: v.good_news ?? null,
+      competitors: v.competitors ?? null,
+      display_stock: v.display_stock ?? null,
+      follow_up: v.follow_up ?? null,
+      buzz_plan: v.buzz_plan ?? null,
+      training: v.training ?? null,
+    };
+  });
+}
+
+export async function updateCMNickname(telegramId: number, nickname: string): Promise<boolean> {
+  const { error } = await supabase
+    .from("cms")
+    .update({ nickname })
+    .eq("telegram_id", telegramId);
+  return !error;
 }
 
 export async function getFullVisitForCM(

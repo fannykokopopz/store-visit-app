@@ -10,7 +10,8 @@ export async function GET(
     return Response.json({ error: "Not authorised" }, { status: 401 });
   }
   const { id } = await params;
-  const result = await getStoreTimelineForCM(cm.telegram_id, id);
+  const allCMs = new URL(req.url).searchParams.get("all") === "true";
+  const result = await getStoreTimelineForCM(cm.telegram_id, id, { allCMs });
   if (!result.store) {
     return Response.json({ error: "Store not found" }, { status: 404 });
   }

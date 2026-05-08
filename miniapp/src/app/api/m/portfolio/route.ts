@@ -7,5 +7,5 @@ export async function GET(req: Request) {
     return Response.json({ error: "Not authorised" }, { status: 401 });
   }
   const stores = await getPortfolioForCM(cm.telegram_id);
-  return Response.json({ cm: { name: cm.full_name, market: cm.market }, stores });
+  return Response.json({ cm: { name: cm.full_name, nickname: cm.nickname, market: cm.market }, stores });
 }
