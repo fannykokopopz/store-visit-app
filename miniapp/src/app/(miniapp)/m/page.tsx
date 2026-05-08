@@ -123,7 +123,7 @@ export default function PortfolioPage() {
       {/* Dark header */}
       <header
         className="px-4 pt-5 pb-5"
-        style={{ background: "linear-gradient(160deg, #1C1C22 0%, #26262F 100%)" }}
+        style={{ background: "linear-gradient(160deg, #2C2C38 0%, #383848 100%)" }}
       >
         <p className="text-[10px] font-semibold uppercase tracking-widest text-white/40 mb-1">
           Good day
