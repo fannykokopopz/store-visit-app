@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { initTelegram } from "../../telegram-init";
+import { useSwipeBack } from "@/lib/useSwipeBack";
 
 interface VisitSummary {
   id: string;
@@ -62,6 +63,7 @@ export default function StorePage({
   const { id } = use(params);
   const [data, setData] = useState<StorePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  useSwipeBack();
 
   useEffect(() => {
     (async () => {

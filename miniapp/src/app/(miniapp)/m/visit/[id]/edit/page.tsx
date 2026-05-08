@@ -4,6 +4,7 @@ import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { initTelegram } from "../../../telegram-init";
+import { useSwipeBack } from "@/lib/useSwipeBack";
 
 interface FullVisit {
   id: string;
@@ -86,6 +87,7 @@ export default function EditVisitPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  useSwipeBack();
 
   const [visit, setVisit] = useState<FullVisit | null>(null);
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
