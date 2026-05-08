@@ -24,6 +24,7 @@ export interface VisitSummary {
   follow_up: string | null;
   buzz_plan: string | null;
   photo_count: number;
+  thumb_urls: string[];
 }
 
 export interface FullVisit extends VisitSummary {
@@ -121,26 +122,39 @@ export async function getStoreTimelineForCM(
   ]);
 
   const store = (storeRes.data as Store | null) ?? null;
-  const visitRows = (visitsRes.data ?? []) as Omit<VisitSummary, "photo_count">[];
+  const visitRows = (visitsRes.data ?? []) as Omit<VisitSummary, "photo_count" | "thumb_urls">[];
 
   if (visitRows.length === 0) return { store, visits: [] };
 
   const ids = visitRows.map((v) => v.id);
   const { data: photoRows } = await supabase
     .from("visit_photos")
-    .select("visit_id")
-    .in("visit_id", ids);
+    .select("visit_id, storage_path")
+    .in("visit_id", ids)
+    .order("created_at");
 
   const countByVisit = new Map<string, number>();
+  const thumbPathsByVisit = new Map<string, string[]>();
   for (const p of photoRows ?? []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const vid = (p as any).visit_id as string;
+    const row = p as any;
+    const vid = row.visit_id as string;
+    const path = row.storage_path as string;
     countByVisit.set(vid, (countByVisit.get(vid) ?? 0) + 1);
+    const existing = thumbPathsByVisit.get(vid) ?? [];
+    if (existing.length < 3) { existing.push(path); thumbPathsByVisit.set(vid, existing); }
   }
+
+  // Sign all thumbnail paths in one batch
+  const allThumbPaths = [...thumbPathsByVisit.values()].flat();
+  const signedUrls = await signPhotoUrls(allThumbPaths);
+  const signedMap = new Map<string, string>();
+  allThumbPaths.forEach((p, i) => { if (signedUrls[i]) signedMap.set(p, signedUrls[i]); });
 
   const visits: VisitSummary[] = visitRows.map((v) => ({
     ...v,
     photo_count: countByVisit.get(v.id) ?? 0,
+    thumb_urls: (thumbPathsByVisit.get(v.id) ?? []).map((p) => signedMap.get(p) ?? "").filter(Boolean),
   }));
 
   return { store, visits };
@@ -188,6 +202,7 @@ export async function getFullVisitForCM(
     submitted_at: v.submitted_at,
     edited_at: v.edited_at,
     photo_count: photoPaths.length,
+    thumb_urls: [],
     photo_paths: photoPaths,
   };
 }

@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { initTelegram } from "../../telegram-init";
 import { useSwipeBack } from "@/lib/useSwipeBack";
 
@@ -14,6 +15,7 @@ interface VisitSummary {
   follow_up: string | null;
   buzz_plan: string | null;
   photo_count: number;
+  thumb_urls: string[];
 }
 
 interface Store {
@@ -37,16 +39,6 @@ function fmtDate(dateStr: string): string {
   });
 }
 
-// Which of the 5 sections are filled
-function filledSections(v: VisitSummary): boolean[] {
-  return [
-    !!v.good_news,
-    !!v.competitors,
-    !!v.display_stock,
-    !!v.follow_up,
-    !!v.buzz_plan,
-  ];
-}
 
 const TIER_STYLE: Record<string, string> = {
   T1: "bg-[var(--color-tier-t1-bg)] text-[var(--color-tier-t1-fg)]",
@@ -159,8 +151,7 @@ export default function StorePage({
 }
 
 function VisitCard({ visit }: { visit: VisitSummary }) {
-  const segs = filledSections(visit);
-  const filledCount = segs.filter(Boolean).length;
+  const preview = visit.good_news ?? visit.competitors ?? visit.display_stock ?? visit.follow_up ?? visit.buzz_plan ?? null;
 
   return (
     <li>
@@ -168,27 +159,33 @@ function VisitCard({ visit }: { visit: VisitSummary }) {
         href={`/m/visit/${visit.id}`}
         className="block rounded-[18px] border border-ink-100 bg-white p-3.5 shadow-sm active:scale-[0.98] transition-transform"
       >
-        {/* Date row */}
-        <div className="flex items-center justify-between mb-2.5">
+        {/* Date + photo count */}
+        <div className="flex items-center justify-between mb-1.5">
           <span className="text-sm font-bold text-ink-700">
             {fmtDate(visit.visit_date)}
           </span>
-          <span className="text-[11px] text-ink-300">
-            {filledCount}/5{visit.photo_count > 0 && <> · 📸 {visit.photo_count}</>}
-          </span>
+          {visit.photo_count > 0 && (
+            <span className="text-[11px] text-ink-300">📸 {visit.photo_count}</span>
+          )}
         </div>
 
-        {/* Fill bar — 5 segments */}
-        <div className="flex gap-1">
-          {segs.map((filled, i) => (
-            <div
-              key={i}
-              className={`h-[3px] flex-1 rounded-full ${
-                filled ? "bg-[var(--color-tc-400)]" : "bg-ink-100"
-              }`}
-            />
-          ))}
-        </div>
+        {/* Text preview */}
+        {preview && (
+          <p className="text-[12px] leading-snug text-ink-400 line-clamp-2 mb-2">
+            {preview}
+          </p>
+        )}
+
+        {/* Photo thumbnails */}
+        {visit.thumb_urls.length > 0 && (
+          <div className="flex gap-1.5">
+            {visit.thumb_urls.map((url, i) => (
+              <div key={i} className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-ink-100">
+                <Image src={url} alt="" fill className="object-cover" sizes="40px" unoptimized />
+              </div>
+            ))}
+          </div>
+        )}
       </Link>
     </li>
   );
