@@ -1,113 +1,179 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import Sidebar from "@/components/Sidebar";
+import NavBar from "@/components/NavBar";
+
+type Market = "ALL" | "SG" | "MY" | "TH" | "HK";
+
+interface StoreStatus {
+  id: string;
+  name: string;
+  chain: string;
+  market: string;
+  tier: "T1" | "T2" | "T3" | "T4" | null;
+  last_visit_date: string | null;
+}
 
 interface Stats {
   visits_this_month: number;
   visits_all_time: number;
   active_cms_this_month: number;
-  total_cms: number;
   total_stores: number;
 }
 
 interface User { first_name: string; username?: string }
 
-const STAT_CARDS = [
-  { key: "visits_this_month",    label: "Visits this month",   accent: true },
-  { key: "active_cms_this_month",label: "Active CMs",          accent: false },
-  { key: "total_stores",         label: "Total stores",         accent: false },
-  { key: "visits_all_time",      label: "All-time visits",      accent: false },
-] as const;
+const MARKET_OPTIONS: { value: Market; label: string }[] = [
+  { value: "ALL", label: "All Markets" },
+  { value: "SG",  label: "🇸🇬 Singapore" },
+  { value: "MY",  label: "🇲🇾 Malaysia" },
+  { value: "TH",  label: "🇹🇭 Thailand" },
+  { value: "HK",  label: "🇭🇰 Hong Kong" },
+];
+
+const TIER_STYLE: Record<string, { bg: string; color: string }> = {
+  T1: { bg: "var(--color-tier-t1-bg)", color: "var(--color-tier-t1-fg)" },
+  T2: { bg: "var(--color-tier-t2-bg)", color: "var(--color-tier-t2-fg)" },
+  T3: { bg: "var(--color-tier-t3-bg)", color: "var(--color-tier-t3-fg)" },
+  T4: { bg: "var(--color-tier-t4-bg)", color: "var(--color-tier-t4-fg)" },
+};
+
+function daysSince(date: string): number {
+  return Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
+}
+
+function storeStatusMeta(lastVisit: string | null): { icon: string; label: string; dimmed: boolean } {
+  if (!lastVisit) return { icon: "○", label: "Never visited", dimmed: true };
+  const d = daysSince(lastVisit);
+  if (d === 0) return { icon: "✅", label: "Today",           dimmed: false };
+  if (d === 1) return { icon: "✅", label: "Yesterday",        dimmed: false };
+  if (d <= 7)  return { icon: "🟢", label: `${d} days ago`,   dimmed: false };
+  if (d <= 30) return { icon: "🟡", label: `${d} days ago`,   dimmed: false };
+  return       { icon: "🔴", label: `${d} days ago`,           dimmed: false };
+}
 
 export default function HomePage() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [user,   setUser]   = useState<User | null>(null);
+  const [stats,  setStats]  = useState<Stats | null>(null);
+  const [stores, setStores] = useState<StoreStatus[]>([]);
+  const [market, setMarket] = useState<Market>("ALL");
 
   useEffect(() => {
-    fetch("/api/stats").then(r => r.ok ? r.json() : null).then(d => { if (d) setStats(d); });
     fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => { if (d) setUser(d); });
+    fetch("/api/overview").then(r => r.ok ? r.json() : null).then(d => {
+      if (d) { setStats(d.stats); setStores(d.stores); }
+    });
   }, []);
 
   if (!user) return null;
 
-  return (
-    <div className="layout">
-      <Sidebar user={user} />
-      <main className="main">
-        <header
-          className="sticky top-0 z-10 px-8 py-5 border-b"
-          style={{ background: "var(--color-surface)", borderColor: "var(--color-border)" }}
-        >
-          <h1 className="text-lg font-extrabold" style={{ color: "var(--color-ink-900)" }}>
-            Overview
-          </h1>
-          <p className="text-xs mt-0.5" style={{ color: "var(--color-ink-300)" }}>
-            Team performance at a glance
-          </p>
-        </header>
+  // Filter + group by chain
+  const filtered = stores.filter(s => market === "ALL" || s.market === market);
+  const byChain = new Map<string, StoreStatus[]>();
+  for (const s of filtered) {
+    if (!byChain.has(s.chain)) byChain.set(s.chain, []);
+    byChain.get(s.chain)!.push(s);
+  }
+  const chains = [...byChain.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
-        <div className="px-8 py-6">
-          {/* Stat cards */}
-          <div className="grid grid-cols-4 gap-4 mb-8">
-            {STAT_CARDS.map(({ key, label, accent }) => (
-              <div
-                key={key}
-                className="rounded-2xl p-5"
-                style={{
-                  background: accent ? "var(--color-tc-50)" : "var(--color-surface)",
-                  border: `1px solid ${accent ? "var(--color-tc-100)" : "var(--color-border)"}`,
-                }}
-              >
-                <p
-                  className="text-3xl font-extrabold leading-none mb-2"
-                  style={{ color: accent ? "var(--color-tc-600)" : "var(--color-ink-900)" }}
-                >
-                  {stats ? stats[key] : "—"}
-                </p>
-                <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--color-ink-300)" }}>
-                  {label}
-                </p>
+  // Store coverage counts for badge
+  const visited = filtered.filter(s => s.last_visit_date).length;
+
+  return (
+    <div>
+      <NavBar user={user} />
+      <div className="page-content">
+
+        {/* KPI row */}
+        <div className="kpi-row">
+          <div className="kpi-card accent">
+            <p className="kpi-value">{stats ? stats.visits_this_month : "—"}</p>
+            <p className="kpi-label">Visits this month</p>
+          </div>
+          <div className="kpi-card">
+            <p className="kpi-value">{stats ? stats.active_cms_this_month : "—"}</p>
+            <p className="kpi-label">Active CMs</p>
+          </div>
+          <div className="kpi-card">
+            <p className="kpi-value">{stats ? stats.total_stores : "—"}</p>
+            <p className="kpi-label">Total stores</p>
+          </div>
+          <div className="kpi-card">
+            <p className="kpi-value">{stats ? stats.visits_all_time : "—"}</p>
+            <p className="kpi-label">All-time visits</p>
+          </div>
+        </div>
+
+        {/* Store status section */}
+        <div className="section-header">
+          <h2 className="section-title">Store Status</h2>
+          {filtered.length > 0 && (
+            <span className="section-badge">
+              {visited}/{filtered.length} visited
+            </span>
+          )}
+        </div>
+
+        {/* Market chips */}
+        <div className="market-chips" style={{ marginBottom: 20 }}>
+          {MARKET_OPTIONS.map(({ value, label }) => (
+            <button
+              key={value}
+              className={`mchip${market === value ? " active" : ""}`}
+              onClick={() => setMarket(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Chain cards */}
+        {stores.length === 0 ? (
+          <div className="empty-state">
+            <p className="empty-state-icon">🏪</p>
+            <p>No stores found.</p>
+          </div>
+        ) : chains.length === 0 ? (
+          <div className="empty-state">
+            <p className="empty-state-icon">🌏</p>
+            <p>No stores in this market yet.</p>
+          </div>
+        ) : (
+          <div className="chain-grid">
+            {chains.map(([chainName, chainStores]) => (
+              <div key={chainName} className="chain-card">
+                <div className="chain-card-header">
+                  <span className="chain-name">{chainName}</span>
+                  <span className="chain-count">{chainStores.length} store{chainStores.length !== 1 ? "s" : ""}</span>
+                </div>
+                {chainStores.map(store => {
+                  const { icon, label, dimmed } = storeStatusMeta(store.last_visit_date);
+                  const tier = store.tier;
+                  const ts = tier ? TIER_STYLE[tier] : null;
+                  return (
+                    <div key={store.id} className="store-row">
+                      <span className="store-status-icon">{icon}</span>
+                      <div className="store-info">
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          {ts && (
+                            <span className="tier-badge" style={{ background: ts.bg, color: ts.color }}>
+                              {tier}
+                            </span>
+                          )}
+                          <span className="store-row-name">{store.name}</span>
+                        </div>
+                        <p className="store-row-meta" style={{ color: dimmed ? "var(--color-ink-100)" : undefined }}>
+                          {label}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
-
-          {/* Quick links */}
-          <div className="grid grid-cols-2 gap-4">
-            <Link
-              href="/visits"
-              className="rounded-2xl p-6 flex flex-col gap-3 transition-shadow hover:shadow-md"
-              style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
-            >
-              <span className="text-2xl">📋</span>
-              <div>
-                <p className="font-extrabold text-[15px]" style={{ color: "var(--color-ink-900)" }}>
-                  Visit Feed
-                </p>
-                <p className="text-[12px] mt-0.5" style={{ color: "var(--color-ink-300)" }}>
-                  All store visits · filter by CM, store, or date
-                </p>
-              </div>
-            </Link>
-            <Link
-              href="/staff"
-              className="rounded-2xl p-6 flex flex-col gap-3 transition-shadow hover:shadow-md"
-              style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
-            >
-              <span className="text-2xl">👥</span>
-              <div>
-                <p className="font-extrabold text-[15px]" style={{ color: "var(--color-ink-900)" }}>
-                  Staff & Allies
-                </p>
-                <p className="text-[12px] mt-0.5" style={{ color: "var(--color-ink-300)" }}>
-                  Store staff directory · mark allies
-                </p>
-              </div>
-            </Link>
-          </div>
-        </div>
-      </main>
+        )}
+      </div>
     </div>
   );
 }

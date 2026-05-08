@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Sidebar from "@/components/Sidebar";
+import NavBar from "@/components/NavBar";
+
+type Market = "ALL" | "SG" | "MY" | "TH" | "HK";
 
 interface VisitRow {
   id: string;
@@ -22,8 +24,15 @@ interface VisitRow {
 }
 
 interface CMOption { telegram_id: number; name: string }
-interface StoreOption { id: string; name: string; chain: string }
 interface User { first_name: string; username?: string }
+
+const MARKET_OPTIONS: { value: Market; label: string }[] = [
+  { value: "ALL", label: "All" },
+  { value: "SG",  label: "🇸🇬 SG" },
+  { value: "MY",  label: "🇲🇾 MY" },
+  { value: "TH",  label: "🇹🇭 TH" },
+  { value: "HK",  label: "🇭🇰 HK" },
+];
 
 const TIER_STYLE: Record<string, { bg: string; color: string }> = {
   T1: { bg: "var(--color-tier-t1-bg)", color: "var(--color-tier-t1-fg)" },
@@ -33,293 +42,258 @@ const TIER_STYLE: Record<string, { bg: string; color: string }> = {
 };
 
 const SECTIONS = [
-  { key: "good_news",    label: "Good News",             icon: "🌟", bg: "var(--color-section-amber-bg)",  border: "var(--color-section-amber-border)",  color: "var(--color-tc-600)" },
-  { key: "competitors",  label: "Competitors' Insights", icon: "🔍", bg: "var(--color-section-blue-bg)",   border: "var(--color-section-blue-border)",   color: "var(--color-tier-t1-fg)" },
-  { key: "display_stock",label: "Display & Stock",       icon: "📦", bg: "var(--color-section-green-bg)",  border: "var(--color-section-green-border)",  color: "var(--color-tier-t2-fg)" },
-  { key: "follow_up",    label: "What to Follow Up",     icon: "✅", bg: "var(--color-section-pink-bg)",   border: "var(--color-section-pink-border)",   color: "#C0185A" },
-  { key: "buzz_plan",    label: "Buzz Plan",             icon: "⚡", bg: "var(--color-section-purple-bg)", border: "var(--color-section-purple-border)", color: "#5B2DB5" },
-  { key: "training",     label: "Training",              icon: "🎓", bg: "var(--color-section-teal-bg)",   border: "var(--color-section-teal-border)",   color: "var(--color-section-teal-fg)" },
+  { key: "good_news",     label: "Good News",             icon: "🌟", bg: "var(--color-section-amber-bg)",  border: "var(--color-section-amber-border)",  color: "var(--color-tc-600)" },
+  { key: "competitors",   label: "Competitors' Insights", icon: "🔍", bg: "var(--color-section-blue-bg)",   border: "var(--color-section-blue-border)",   color: "var(--color-tier-t1-fg)" },
+  { key: "display_stock", label: "Display & Stock",       icon: "📦", bg: "var(--color-section-green-bg)",  border: "var(--color-section-green-border)",  color: "var(--color-tier-t2-fg)" },
+  { key: "follow_up",     label: "What to Follow Up",     icon: "✅", bg: "var(--color-section-pink-bg)",   border: "var(--color-section-pink-border)",   color: "#C0185A" },
+  { key: "buzz_plan",     label: "Buzz Plan",             icon: "⚡", bg: "var(--color-section-purple-bg)", border: "var(--color-section-purple-border)", color: "#5B2DB5" },
+  { key: "training",      label: "Training",              icon: "🎓", bg: "var(--color-section-teal-bg)",   border: "var(--color-section-teal-border)",   color: "var(--color-section-teal-fg)" },
 ] as const;
 
+function getMonday(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addWeeks(date: Date, n: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n * 7);
+  return d;
+}
+
+function toISO(d: Date): string { return d.toISOString().slice(0, 10); }
+
+function weekLabel(monday: Date): string {
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const fmtDay = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const year = monday.getFullYear();
+  return `${fmtDay(monday)} – ${fmtDay(sunday)} ${year}`;
+}
+
 function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
 }
 
 export default function VisitsPage() {
-  const [user, setUser] = useState<User | null>(null);
-  const [visits, setVisits] = useState<VisitRow[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [user,     setUser]     = useState<User | null>(null);
+  const [visits,   setVisits]   = useState<VisitRow[]>([]);
+  const [total,    setTotal]    = useState(0);
+  const [loading,  setLoading]  = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [cms, setCms] = useState<CMOption[]>([]);
-  const [stores, setStores] = useState<StoreOption[]>([]);
-
-  // Filters
+  const [cms,      setCms]      = useState<CMOption[]>([]);
+  const [market,   setMarket]   = useState<Market>("ALL");
   const [filterCM, setFilterCM] = useState("");
-  const [filterStore, setFilterStore] = useState("");
-  const [filterFrom, setFilterFrom] = useState("");
-  const [filterTo, setFilterTo] = useState("");
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  const thisMonday = getMonday(new Date());
+  const currentMonday = addWeeks(thisMonday, weekOffset);
+  const currentSunday = new Date(currentMonday);
+  currentSunday.setDate(currentMonday.getDate() + 6);
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => { if (d) setUser(d); });
     fetch("/api/filters").then(r => r.ok ? r.json() : null).then(d => {
-      if (d) { setCms(d.cms); setStores(d.stores); }
+      if (d) setCms(d.cms);
     });
   }, []);
 
-  const fetchVisits = useCallback(async (newOffset = 0, append = false) => {
+  const fetchVisits = useCallback(async () => {
     setLoading(true);
     const p = new URLSearchParams();
+    p.set("from", toISO(currentMonday));
+    p.set("to", toISO(currentSunday));
+    if (market !== "ALL") p.set("market", market);
     if (filterCM) p.set("cm", filterCM);
-    if (filterStore) p.set("store", filterStore);
-    if (filterFrom) p.set("from", filterFrom);
-    if (filterTo) p.set("to", filterTo);
-    p.set("offset", String(newOffset));
     const res = await fetch(`/api/visits?${p}`);
-    if (!res.ok) { setLoading(false); return; }
-    const data = await res.json();
-    setVisits(append ? (prev) => [...prev, ...data.visits] : data.visits);
-    setTotal(data.total);
-    setOffset(newOffset);
+    if (res.ok) {
+      const data = await res.json();
+      setVisits(data.visits);
+      setTotal(data.total);
+    }
     setLoading(false);
-  }, [filterCM, filterStore, filterFrom, filterTo]);
-
-  useEffect(() => { fetchVisits(0); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function applyFilters() { fetchVisits(0); setExpanded(null); }
-  function clearFilters() {
-    setFilterCM(""); setFilterStore(""); setFilterFrom(""); setFilterTo("");
-    setTimeout(() => fetchVisits(0), 0);
     setExpanded(null);
-  }
+  }, [market, filterCM, weekOffset]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { fetchVisits(); }, [fetchVisits]);
 
   if (!user) return null;
 
-  const hasMore = offset + 25 < total;
+  const isCurrentWeek = weekOffset === 0;
+  const isFutureWeek  = weekOffset > 0;
 
   return (
-    <div className="layout">
-      <Sidebar user={user} />
-      <main className="main">
-        <header
-          className="sticky top-0 z-10 px-8 py-5 border-b"
-          style={{ background: "var(--color-surface)", borderColor: "var(--color-border)" }}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-lg font-extrabold" style={{ color: "var(--color-ink-900)" }}>
-                Visits
-              </h1>
-              <p className="text-xs mt-0.5" style={{ color: "var(--color-ink-300)" }}>
-                {total} visit{total !== 1 ? "s" : ""} · {loading ? "loading…" : "up to date"}
-              </p>
-            </div>
+    <div>
+      <NavBar user={user} />
+      <div className="page-content">
+
+        {/* Page header */}
+        <div style={{ marginBottom: 24 }}>
+          <h1 className="section-title" style={{ fontSize: 20, marginBottom: 4 }}>Store Updates</h1>
+          <p style={{ fontSize: 13, color: "var(--color-ink-300)" }}>
+            {loading ? "Loading…" : `${total} visit${total !== 1 ? "s" : ""} this week`}
+          </p>
+        </div>
+
+        {/* Controls row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+
+          {/* Market chips */}
+          <div className="market-chips">
+            {MARKET_OPTIONS.map(({ value, label }) => (
+              <button
+                key={value}
+                className={`mchip${market === value ? " active" : ""}`}
+                onClick={() => setMarket(value)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
-          {/* Filters */}
-          <div className="flex gap-2 mt-4 flex-wrap">
+          <div style={{ flex: 1 }} />
+
+          {/* Week navigation */}
+          <div className="week-nav">
+            <button
+              className="week-btn"
+              onClick={() => setWeekOffset(w => w - 1)}
+            >
+              ‹
+            </button>
+            <span className="week-label">
+              {isCurrentWeek ? "This week" : weekLabel(currentMonday)}
+            </span>
+            <button
+              className="week-btn"
+              disabled={isFutureWeek}
+              onClick={() => setWeekOffset(w => w + 1)}
+            >
+              ›
+            </button>
+          </div>
+
+          {/* CM filter */}
+          {cms.length > 0 && (
             <select
               value={filterCM}
               onChange={e => setFilterCM(e.target.value)}
-              className="rounded-xl border px-3 py-1.5 text-[12px] font-medium"
-              style={{ borderColor: "var(--color-border)", color: "var(--color-ink-700)", background: "var(--color-surface)" }}
+              className="filter-select"
             >
               <option value="">All CMs</option>
               {cms.map(c => <option key={c.telegram_id} value={c.telegram_id}>{c.name}</option>)}
             </select>
-
-            <select
-              value={filterStore}
-              onChange={e => setFilterStore(e.target.value)}
-              className="rounded-xl border px-3 py-1.5 text-[12px] font-medium"
-              style={{ borderColor: "var(--color-border)", color: "var(--color-ink-700)", background: "var(--color-surface)" }}
-            >
-              <option value="">All stores</option>
-              {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-
-            <input
-              type="date"
-              value={filterFrom}
-              onChange={e => setFilterFrom(e.target.value)}
-              className="rounded-xl border px-3 py-1.5 text-[12px]"
-              style={{ borderColor: "var(--color-border)", color: "var(--color-ink-700)", background: "var(--color-surface)" }}
-            />
-            <input
-              type="date"
-              value={filterTo}
-              onChange={e => setFilterTo(e.target.value)}
-              className="rounded-xl border px-3 py-1.5 text-[12px]"
-              style={{ borderColor: "var(--color-border)", color: "var(--color-ink-700)", background: "var(--color-surface)" }}
-            />
-
-            <button
-              onClick={applyFilters}
-              className="rounded-xl px-4 py-1.5 text-[12px] font-bold text-white"
-              style={{ background: "var(--color-tc-500)" }}
-            >
-              Filter
-            </button>
-            {(filterCM || filterStore || filterFrom || filterTo) && (
-              <button
-                onClick={clearFilters}
-                className="rounded-xl px-3 py-1.5 text-[12px] font-medium"
-                style={{ color: "var(--color-ink-300)", background: "var(--color-ink-50)" }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </header>
-
-        <div className="px-8 py-4">
-          {/* Table */}
-          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr style={{ background: "var(--color-ink-50)", borderBottom: "1px solid var(--color-border)" }}>
-                  <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wide" style={{ color: "var(--color-ink-300)" }}>Date</th>
-                  <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wide" style={{ color: "var(--color-ink-300)" }}>Store</th>
-                  <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wide" style={{ color: "var(--color-ink-300)" }}>CM</th>
-                  <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wide" style={{ color: "var(--color-ink-300)" }}>Sections</th>
-                  <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wide" style={{ color: "var(--color-ink-300)" }}>Photos</th>
-                  <th className="w-6" />
-                </tr>
-              </thead>
-              <tbody>
-                {visits.length === 0 && !loading && (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-[13px]" style={{ color: "var(--color-ink-300)" }}>
-                      No visits found.
-                    </td>
-                  </tr>
-                )}
-                {visits.map((v) => {
-                  const tier = v.store_tier;
-                  const ts = tier ? TIER_STYLE[tier] : TIER_STYLE.T4;
-                  const isExpanded = expanded === v.id;
-                  const filledSections = SECTIONS.filter(s => v[s.key]);
-
-                  return (
-                    <>
-                      <tr
-                        key={v.id}
-                        onClick={() => setExpanded(isExpanded ? null : v.id)}
-                        className="cursor-pointer transition-colors"
-                        style={{
-                          borderBottom: isExpanded ? "none" : "1px solid var(--color-border)",
-                          background: isExpanded ? "var(--color-ink-50)" : "var(--color-surface)",
-                        }}
-                        onMouseEnter={e => { if (!isExpanded) (e.currentTarget as HTMLTableRowElement).style.background = "var(--color-ink-50)"; }}
-                        onMouseLeave={e => { if (!isExpanded) (e.currentTarget as HTMLTableRowElement).style.background = "var(--color-surface)"; }}
-                      >
-                        <td className="px-4 py-3.5 font-medium whitespace-nowrap" style={{ color: "var(--color-ink-700)" }}>
-                          {fmtDate(v.visit_date)}
-                          {v.edited_at && (
-                            <span className="ml-1.5 text-[10px]" style={{ color: "var(--color-ink-300)" }}>edited</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <div className="flex items-center gap-2">
-                            {tier && (
-                              <span
-                                className="tier-badge shrink-0"
-                                style={{ background: ts.bg, color: ts.color }}
-                              >
-                                {tier}
-                              </span>
-                            )}
-                            <span className="font-semibold truncate max-w-[180px]" style={{ color: "var(--color-ink-900)" }}>
-                              {v.store_name}
-                            </span>
-                          </div>
-                          <p className="text-[11px] mt-0.5 pl-0" style={{ color: "var(--color-ink-300)" }}>{v.store_chain}</p>
-                        </td>
-                        <td className="px-4 py-3.5" style={{ color: "var(--color-ink-700)" }}>{v.cm_name}</td>
-                        <td className="px-4 py-3.5">
-                          <div className="flex gap-0.5">
-                            {Array.from({ length: 6 }, (_, i) => (
-                              <div
-                                key={i}
-                                className="h-2.5 w-2.5 rounded-sm"
-                                style={{
-                                  background: i < v.sections_filled
-                                    ? "var(--color-tc-500)"
-                                    : "var(--color-ink-100)",
-                                }}
-                              />
-                            ))}
-                          </div>
-                          <p className="text-[10px] mt-1" style={{ color: "var(--color-ink-300)" }}>
-                            {v.sections_filled}/6
-                          </p>
-                        </td>
-                        <td className="px-4 py-3.5" style={{ color: "var(--color-ink-500)" }}>
-                          {v.photo_count > 0 ? `📸 ${v.photo_count}` : "—"}
-                        </td>
-                        <td className="px-4 py-3.5 text-right" style={{ color: "var(--color-ink-300)" }}>
-                          {isExpanded ? "▲" : "▼"}
-                        </td>
-                      </tr>
-
-                      {isExpanded && (
-                        <tr key={`${v.id}-detail`}>
-                          <td
-                            colSpan={6}
-                            className="px-4 pb-4"
-                            style={{ background: "var(--color-ink-50)", borderBottom: "1px solid var(--color-border)" }}
-                          >
-                            {filledSections.length === 0 ? (
-                              <p className="text-[12px] py-2" style={{ color: "var(--color-ink-300)" }}>
-                                No notes were added for this visit.
-                              </p>
-                            ) : (
-                              <div className="grid grid-cols-2 gap-2 pt-2">
-                                {filledSections.map(s => (
-                                  <div
-                                    key={s.key}
-                                    className="rounded-xl p-3.5"
-                                    style={{ background: s.bg, border: `1px solid ${s.border}` }}
-                                  >
-                                    <div className="flex items-center gap-2 mb-1.5">
-                                      <span className="text-sm">{s.icon}</span>
-                                      <span className="text-[10px] font-extrabold uppercase tracking-wider" style={{ color: s.color }}>
-                                        {s.label}
-                                      </span>
-                                    </div>
-                                    <p className="text-[12px] leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-ink-700)" }}>
-                                      {v[s.key]}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Load more */}
-          {hasMore && (
-            <div className="flex justify-center mt-4">
-              <button
-                onClick={() => fetchVisits(offset + 25, true)}
-                disabled={loading}
-                className="rounded-xl px-6 py-2.5 text-[13px] font-semibold transition-colors disabled:opacity-50"
-                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", color: "var(--color-ink-500)" }}
-              >
-                {loading ? "Loading…" : `Load more (${total - offset - 25} remaining)`}
-              </button>
-            </div>
           )}
         </div>
-      </main>
+
+        {/* Visit feed */}
+        {loading ? (
+          <div className="empty-state">
+            <p style={{ color: "var(--color-ink-300)", fontSize: 13 }}>Loading…</p>
+          </div>
+        ) : visits.length === 0 ? (
+          <div className="empty-state">
+            <p className="empty-state-icon">📋</p>
+            <p>No visits logged for this week{market !== "ALL" ? ` in ${market}` : ""}.</p>
+          </div>
+        ) : (
+          <div>
+            {visits.map(v => {
+              const tier = v.store_tier;
+              const ts = tier ? TIER_STYLE[tier] : null;
+              const isExpanded = expanded === v.id;
+              const filledSections = SECTIONS.filter(s => v[s.key]);
+
+              return (
+                <div key={v.id} className="visit-card">
+                  {/* Card header */}
+                  <div
+                    className="visit-card-header"
+                    onClick={() => setExpanded(isExpanded ? null : v.id)}
+                    style={{ background: isExpanded ? "var(--color-ink-50)" : undefined }}
+                  >
+                    {ts && (
+                      <span className="tier-badge" style={{ background: ts.bg, color: ts.color }}>
+                        {tier}
+                      </span>
+                    )}
+                    <div className="visit-card-store">
+                      <p className="visit-store-name">{v.store_name}</p>
+                      <div className="visit-meta-row">
+                        <span className="visit-meta-item">{v.cm_name}</span>
+                        <span className="visit-meta-item">·</span>
+                        <span className="visit-meta-item">{fmtDate(v.visit_date)}</span>
+                        <span className="visit-meta-item">·</span>
+                        {/* Section dots */}
+                        <span className="visit-sections">
+                          {Array.from({ length: 6 }, (_, i) => (
+                            <span
+                              key={i}
+                              className="visit-section-dot"
+                              style={{
+                                background: i < v.sections_filled
+                                  ? "var(--color-tc-500)"
+                                  : "var(--color-ink-100)",
+                              }}
+                            />
+                          ))}
+                          <span className="visit-meta-item" style={{ marginLeft: 4 }}>
+                            {v.sections_filled}/6
+                          </span>
+                        </span>
+                        {v.photo_count > 0 && (
+                          <>
+                            <span className="visit-meta-item">·</span>
+                            <span className="visit-meta-item">📸 {v.photo_count}</span>
+                          </>
+                        )}
+                        {v.edited_at && (
+                          <>
+                            <span className="visit-meta-item">·</span>
+                            <span className="visit-meta-item" style={{ color: "var(--color-ink-300)" }}>edited</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <span className="visit-chevron">{isExpanded ? "▲" : "▼"}</span>
+                  </div>
+
+                  {/* Expanded detail */}
+                  {isExpanded && (
+                    <div className="visit-detail">
+                      {filledSections.length === 0 ? (
+                        <p style={{ fontSize: 13, color: "var(--color-ink-300)", paddingTop: 14 }}>
+                          No notes were added for this visit.
+                        </p>
+                      ) : (
+                        <div className="visit-sections-grid">
+                          {filledSections.map(s => (
+                            <div
+                              key={s.key}
+                              className="visit-section-card"
+                              style={{ background: s.bg, border: `1px solid ${s.border}` }}
+                            >
+                              <div className="visit-section-label" style={{ color: s.color }}>
+                                <span>{s.icon}</span>
+                                <span>{s.label}</span>
+                              </div>
+                              <p className="visit-section-text">{v[s.key]}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

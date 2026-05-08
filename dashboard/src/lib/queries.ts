@@ -73,6 +73,53 @@ export async function getTeamStats(): Promise<TeamStats> {
   };
 }
 
+export interface StoreStatus {
+  id: string;
+  name: string;
+  chain: string;
+  market: 'SG' | 'TH' | 'MY' | 'HK';
+  tier: 'T1' | 'T2' | 'T3' | 'T4' | null;
+  last_visit_date: string | null;
+}
+
+export async function getStoreStatus(): Promise<StoreStatus[]> {
+  const { data: stores } = await supabase
+    .from('stores')
+    .select('id, name, chain, market, tier')
+    .eq('is_active', true)
+    .order('market')
+    .order('chain')
+    .order('name');
+
+  if (!stores || stores.length === 0) return [];
+
+  const storeIds = stores.map((s) => s.id);
+
+  const { data: visits } = await supabase
+    .from('visits')
+    .select('store_id, visit_date')
+    .in('store_id', storeIds)
+    .eq('is_locked', true)
+    .order('visit_date', { ascending: false });
+
+  const lastVisit = new Map<string, string>();
+  for (const v of visits ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = v as any;
+    if (!lastVisit.has(row.store_id)) lastVisit.set(row.store_id, row.visit_date);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return stores.map((s: any) => ({
+    id: s.id,
+    name: s.name,
+    chain: s.chain,
+    market: s.market,
+    tier: s.tier,
+    last_visit_date: lastVisit.get(s.id) ?? null,
+  }));
+}
+
 export async function getVisitsFeed(opts: {
   cm?: number;
   store?: string;
@@ -80,6 +127,7 @@ export async function getVisitsFeed(opts: {
   to?: string;
   offset?: number;
   limit?: number;
+  market?: string;
 }): Promise<{ visits: VisitRow[]; total: number }> {
   const limit = opts.limit ?? 25;
   const offset = opts.offset ?? 0;
@@ -96,6 +144,16 @@ export async function getVisitsFeed(opts: {
   if (opts.store) q = q.eq("store_id", opts.store);
   if (opts.from) q = q.gte("visit_date", opts.from);
   if (opts.to) q = q.lte("visit_date", opts.to);
+  if (opts.market) {
+    const { data: mStores } = await supabase
+      .from("stores")
+      .select("id")
+      .eq("market", opts.market)
+      .eq("is_active", true);
+    const ids = (mStores ?? []).map((s: { id: string }) => s.id);
+    if (ids.length === 0) return { visits: [], total: 0 };
+    q = q.in("store_id", ids);
+  }
 
   const { data, count } = await q;
 
