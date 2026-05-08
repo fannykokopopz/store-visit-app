@@ -3,12 +3,11 @@ import { InlineKeyboard } from 'grammy';
 import { BotContext } from '../middleware/auth.js';
 import { getStoresForCM } from '../../db/queries/stores.js';
 import { searchStoresByName, getStoreById } from '../../db/queries/stores.js';
-import { createVisit, lockVisit, attachVisitSections, getLastVisitDatePerStore, getStoreContextForCM } from '../../db/queries/visits.js';
+import { createVisit, lockVisit, attachVisitSections, getLastVisitDatePerStore } from '../../db/queries/visits.js';
 import { getActivePlan, consumePlan } from '../../db/queries/visit-plans.js';
 import { buildStorePicker, buildSearchResultsPicker } from '../keyboards/store-picker.js';
 import { buildTemplateMessage } from '../../utils/template.js';
 import { parseTemplate, filledCount } from '../../utils/parse-template.js';
-import { daysSinceLabel } from '../../utils/format.js';
 import { startPhotoCollection } from '../photo-collection.js';
 import { sendVisitDetails } from '../visit-details.js';
 
@@ -115,43 +114,9 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
   }
 
-  // ── Pre-visit context: last visit + 30d count ─────────────────────────────
-
-  const storeTier = stores.find((s) => s.id === storeId)?.tier ?? null;
-  const storeContext = await conversation.external(() =>
-    getStoreContextForCM(telegramId, storeId),
-  );
-
-  const tierBadge = storeTier ? ` (${storeTier})` : '';
-  if (!storeContext.lastVisitDate) {
-    await ctx.reply(
-      `📍 *${storeName}*${tierBadge}\n✨ First visit to this store`,
-      { parse_mode: 'Markdown' },
-    );
-  } else {
-    const lastFmt = new Date(storeContext.lastVisitDate).toLocaleDateString('en-GB', {
-      day: '2-digit', month: 'short',
-    });
-    const ago = daysSinceLabel(storeContext.lastVisitDate).toLowerCase();
-    const block =
-      `📍 *${storeName}*${tierBadge}\n` +
-      `🕐 Last visit: ${ago} (${lastFmt})\n` +
-      `📊 ${storeContext.last30dCount} visit${storeContext.last30dCount === 1 ? '' : 's'} in the last 30 days`;
-    const replyMarkup = storeContext.lastVisitId
-      ? new InlineKeyboard().text('📋 View full last visit', `viewlast:${storeContext.lastVisitId}`)
-      : undefined;
-    await ctx.reply(block, { parse_mode: 'Markdown', reply_markup: replyMarkup });
-  }
-
-  // ── Show active plan if any ────────────────────────────────────────────────
+  // ── Consume active plan if any (silent) ───────────────────────────────────
 
   const plan = await conversation.external(() => getActivePlan(telegramId, storeId));
-  if (plan) {
-    let planMsg = `📋 *Your plan for ${storeName}*\n`;
-    if (plan.buzz_plan) planMsg += `💡 ${plan.buzz_plan}\n`;
-    if (plan.notes) planMsg += `📝 ${plan.notes}`;
-    await ctx.reply(planMsg.trim(), { parse_mode: 'Markdown' });
-  }
 
   // ── Step 2: Template ───────────────────────────────────────────────────────
 
