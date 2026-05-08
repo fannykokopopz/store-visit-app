@@ -151,8 +151,6 @@ export default function StorePage({
 }
 
 function VisitCard({ visit }: { visit: VisitSummary }) {
-  const preview = visit.good_news ?? visit.competitors ?? visit.display_stock ?? visit.follow_up ?? visit.buzz_plan ?? null;
-
   return (
     <li>
       <Link
@@ -160,7 +158,7 @@ function VisitCard({ visit }: { visit: VisitSummary }) {
         className="block rounded-[18px] border border-ink-100 bg-white p-3.5 shadow-sm active:scale-[0.98] transition-transform"
       >
         {/* Date + photo count */}
-        <div className="flex items-center justify-between mb-1.5">
+        <div className={`flex items-center justify-between ${visit.thumb_urls.length > 0 ? "mb-2.5" : ""}`}>
           <span className="text-sm font-bold text-ink-700">
             {fmtDate(visit.visit_date)}
           </span>
@@ -169,19 +167,12 @@ function VisitCard({ visit }: { visit: VisitSummary }) {
           )}
         </div>
 
-        {/* Text preview */}
-        {preview && (
-          <p className="text-[12px] leading-snug text-ink-400 line-clamp-2 mb-2">
-            {preview}
-          </p>
-        )}
-
         {/* Photo thumbnails */}
         {visit.thumb_urls.length > 0 && (
-          <div className="flex gap-1.5">
+          <div className="flex gap-2">
             {visit.thumb_urls.map((url, i) => (
-              <div key={i} className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-ink-100">
-                <Image src={url} alt="" fill className="object-cover" sizes="40px" unoptimized />
+              <div key={i} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-ink-100">
+                <Image src={url} alt="" fill className="object-cover" sizes="64px" unoptimized />
               </div>
             ))}
           </div>
