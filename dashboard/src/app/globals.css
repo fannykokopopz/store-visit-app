@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* Backgrounds */
+  --color-bg:      #F5F4F1;
+  --color-surface: #FFFFFF;
+  --color-border:  #E5E4E1;
+  --color-border-strong: #CCCBC8;
+
+  /* Ink scale */
+  --color-ink-900: #111110;
+  --color-ink-700: #3A3936;
+  --color-ink-500: #716F6A;
+  --color-ink-300: #A8A7A2;
+  --color-ink-100: #EEEDEA;
+  --color-ink-50:  #F8F7F4;
+
+  /* TC amber brand */
+  --color-tc-600: #B86B00;
+  --color-tc-500: #E89211;
+  --color-tc-100: #FDDFA0;
+  --color-tc-50:  #FEF6E4;
+
+  /* Tier badges */
+  --color-tier-t1-bg: #DDE9FB; --color-tier-t1-fg: #1A5DB5;
+  --color-tier-t2-bg: #D6F0DC; --color-tier-t2-fg: #1E7A3A;
+  --color-tier-t3-bg: #FEF3DC; --color-tier-t3-fg: #B86B00;
+  --color-tier-t4-bg: #EDEDF0; --color-tier-t4-fg: #555560;
+
+  /* Section colors */
+  --color-section-amber-bg:    #FEF6E4; --color-section-amber-border:  #FDDFA0;
+  --color-section-blue-bg:     #EAF1FD; --color-section-blue-border:   #C4D9F8;
+  --color-section-green-bg:    #E7F5EA; --color-section-green-border:  #B8DEC0;
+  --color-section-pink-bg:     #FDE8F0; --color-section-pink-border:   #F5BDD5;
+  --color-section-purple-bg:   #EDE8FD; --color-section-purple-border: #CAB8F5;
+  --color-section-teal-bg:     #E4F5F6; --color-section-teal-border:   #96D5DA;
+  --color-section-teal-fg:     #0A7A84;
+
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink-700);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Sidebar layout */
+.layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.main {
+  min-width: 0;
+  padding: 0;
+}
+
+/* Tier badge */
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+}
