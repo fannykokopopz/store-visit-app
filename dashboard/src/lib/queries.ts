@@ -239,6 +239,115 @@ export async function getAllStaff(): Promise<StaffRow[]> {
   });
 }
 
+export interface StoreInfo {
+  id: string;
+  name: string;
+  chain: string;
+  market: string;
+  tier: 'T1' | 'T2' | 'T3' | 'T4' | null;
+}
+
+export interface StoreVisitSummary {
+  id: string;
+  visit_date: string;
+  cm_name: string;
+  good_news: string | null;
+  competitors: string | null;
+  display_stock: string | null;
+  follow_up: string | null;
+  buzz_plan: string | null;
+  training: string | null;
+  photo_count: number;
+  thumb_urls: string[];
+  photo_urls: string[];
+}
+
+export async function signPhotoUrls(paths: string[], ttlSec = 300): Promise<string[]> {
+  if (paths.length === 0) return [];
+  const { data, error } = await supabase.storage.from('sva-photos').createSignedUrls(paths, ttlSec);
+  if (error || !data) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data as any[]).map((d) => d.signedUrl as string).filter(Boolean);
+}
+
+export async function getVisitPhotos(visitId: string): Promise<string[]> {
+  const { data } = await supabase
+    .from('visit_photos')
+    .select('storage_path')
+    .eq('visit_id', visitId)
+    .order('created_at');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const paths = (data ?? []).map((p: any) => p.storage_path as string).filter(Boolean);
+  return signPhotoUrls(paths);
+}
+
+export async function getStoreDashboard(storeId: string): Promise<{ store: StoreInfo | null; visits: StoreVisitSummary[] }> {
+  const [storeRes, visitsRes] = await Promise.all([
+    supabase.from('stores').select('id, name, chain, market, tier').eq('id', storeId).single(),
+    supabase
+      .from('visits')
+      .select('id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, cms(full_name, nickname)')
+      .eq('store_id', storeId)
+      .eq('is_locked', true)
+      .order('visit_date', { ascending: false }),
+  ]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const store = (storeRes.data as any) as StoreInfo | null ?? null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visitRows = (visitsRes.data ?? []) as any[];
+
+  if (visitRows.length === 0) return { store, visits: [] };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ids = visitRows.map((v: any) => v.id);
+  const { data: photoRows } = await supabase
+    .from('visit_photos')
+    .select('visit_id, storage_path')
+    .in('visit_id', ids)
+    .order('created_at');
+
+  const allPathsByVisit = new Map<string, string[]>();
+  const thumbPathsByVisit = new Map<string, string[]>();
+  const countByVisit = new Map<string, number>();
+
+  for (const p of photoRows ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = p as any;
+    const vid = row.visit_id as string;
+    const path = row.storage_path as string;
+    countByVisit.set(vid, (countByVisit.get(vid) ?? 0) + 1);
+    const all = allPathsByVisit.get(vid) ?? [];
+    all.push(path);
+    allPathsByVisit.set(vid, all);
+    const thumbs = thumbPathsByVisit.get(vid) ?? [];
+    if (thumbs.length < 3) { thumbs.push(path); thumbPathsByVisit.set(vid, thumbs); }
+  }
+
+  const allPaths = [...allPathsByVisit.values()].flat();
+  const signedUrls = await signPhotoUrls(allPaths);
+  const signedMap = new Map<string, string>();
+  allPaths.forEach((p, i) => { if (signedUrls[i]) signedMap.set(p, signedUrls[i]); });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visits: StoreVisitSummary[] = visitRows.map((v: any) => ({
+    id: v.id,
+    visit_date: v.visit_date,
+    cm_name: v.cms?.nickname ?? v.cms?.full_name ?? 'Unknown',
+    good_news: v.good_news ?? null,
+    competitors: v.competitors ?? null,
+    display_stock: v.display_stock ?? null,
+    follow_up: v.follow_up ?? null,
+    buzz_plan: v.buzz_plan ?? null,
+    training: v.training ?? null,
+    photo_count: countByVisit.get(v.id) ?? 0,
+    thumb_urls: (thumbPathsByVisit.get(v.id) ?? []).map((p) => signedMap.get(p) ?? '').filter(Boolean),
+    photo_urls: (allPathsByVisit.get(v.id) ?? []).map((p) => signedMap.get(p) ?? '').filter(Boolean),
+  }));
+
+  return { store, visits };
+}
+
 export async function setAllyStatus(staffId: string, isAlly: boolean): Promise<boolean> {
   const { error } = await supabase
     .from("staff")

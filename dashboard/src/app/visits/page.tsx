@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import NavBar from "@/components/NavBar";
 
 type Market = "ALL" | "SG" | "MY" | "TH" | "HK";
@@ -9,6 +10,7 @@ interface VisitRow {
   id: string;
   visit_date: string;
   cm_name: string;
+  store_id: string;
   store_name: string;
   store_chain: string;
   store_tier: "T1" | "T2" | "T3" | "T4" | null;
@@ -90,6 +92,11 @@ export default function VisitsPage() {
   const [filterCM, setFilterCM] = useState("");
   const [weekOffset, setWeekOffset] = useState(0);
 
+  // Photo state
+  const [photoCache,   setPhotoCache]   = useState<Record<string, string[]>>({});
+  const [photosLoading, setPhotosLoading] = useState<Record<string, boolean>>({});
+  const [lightbox,     setLightbox]     = useState<string | null>(null);
+
   const thisMonday = getMonday(new Date());
   const currentMonday = addWeeks(thisMonday, weekOffset);
   const currentSunday = new Date(currentMonday);
@@ -120,6 +127,23 @@ export default function VisitsPage() {
   }, [market, filterCM, weekOffset]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchVisits(); }, [fetchVisits]);
+
+  async function loadPhotos(visitId: string) {
+    if (photoCache[visitId] || photosLoading[visitId]) return;
+    setPhotosLoading(prev => ({ ...prev, [visitId]: true }));
+    const res = await fetch(`/api/visits/${visitId}`);
+    if (res.ok) {
+      const data = await res.json();
+      setPhotoCache(prev => ({ ...prev, [visitId]: data.photoUrls }));
+    }
+    setPhotosLoading(prev => ({ ...prev, [visitId]: false }));
+  }
+
+  function handleExpand(visitId: string, photoCount: number) {
+    const next = expanded === visitId ? null : visitId;
+    setExpanded(next);
+    if (next && photoCount > 0) loadPhotos(visitId);
+  }
 
   if (!user) return null;
 
@@ -159,12 +183,7 @@ export default function VisitsPage() {
 
           {/* Week navigation */}
           <div className="week-nav">
-            <button
-              className="week-btn"
-              onClick={() => setWeekOffset(w => w - 1)}
-            >
-              ‹
-            </button>
+            <button className="week-btn" onClick={() => setWeekOffset(w => w - 1)}>‹</button>
             <span className="week-label">
               {isCurrentWeek ? "This week" : weekLabel(currentMonday)}
             </span>
@@ -172,9 +191,7 @@ export default function VisitsPage() {
               className="week-btn"
               disabled={isFutureWeek}
               onClick={() => setWeekOffset(w => w + 1)}
-            >
-              ›
-            </button>
+            >›</button>
           </div>
 
           {/* CM filter */}
@@ -207,13 +224,14 @@ export default function VisitsPage() {
               const ts = tier ? TIER_STYLE[tier] : null;
               const isExpanded = expanded === v.id;
               const filledSections = SECTIONS.filter(s => v[s.key]);
+              const photos = photoCache[v.id] ?? [];
 
               return (
                 <div key={v.id} className="visit-card">
                   {/* Card header */}
                   <div
                     className="visit-card-header"
-                    onClick={() => setExpanded(isExpanded ? null : v.id)}
+                    onClick={() => handleExpand(v.id, v.photo_count)}
                     style={{ background: isExpanded ? "var(--color-ink-50)" : undefined }}
                   >
                     {ts && (
@@ -222,13 +240,18 @@ export default function VisitsPage() {
                       </span>
                     )}
                     <div className="visit-card-store">
-                      <p className="visit-store-name">{v.store_name}</p>
+                      <Link
+                        href={`/visits/store/${v.store_id}`}
+                        className="visit-store-name visit-store-link"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        {v.store_name}
+                      </Link>
                       <div className="visit-meta-row">
                         <span className="visit-meta-item">{v.cm_name}</span>
                         <span className="visit-meta-item">·</span>
                         <span className="visit-meta-item">{fmtDate(v.visit_date)}</span>
                         <span className="visit-meta-item">·</span>
-                        {/* Section dots */}
                         <span className="visit-sections">
                           {Array.from({ length: 6 }, (_, i) => (
                             <span
@@ -265,6 +288,29 @@ export default function VisitsPage() {
                   {/* Expanded detail */}
                   {isExpanded && (
                     <div className="visit-detail">
+                      {/* Photo strip */}
+                      {v.photo_count > 0 && (
+                        <div className="photo-strip-wrap">
+                          {photosLoading[v.id] ? (
+                            <p className="photo-strip-loading">Loading photos…</p>
+                          ) : photos.length > 0 ? (
+                            <div className="photo-strip">
+                              {photos.map((url, i) => (
+                                <button
+                                  key={i}
+                                  className="photo-thumb"
+                                  onClick={() => setLightbox(url)}
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={url} alt={`Photo ${i + 1}`} />
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+
+                      {/* Section cards */}
                       {filledSections.length === 0 ? (
                         <p style={{ fontSize: 13, color: "var(--color-ink-300)", paddingTop: 14 }}>
                           No notes were added for this visit.
@@ -294,6 +340,23 @@ export default function VisitsPage() {
           </div>
         )}
       </div>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div
+          className="lightbox-overlay"
+          onClick={() => setLightbox(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightbox} alt="Photo" className="lightbox-img" />
+          <button
+            className="lightbox-close"
+            onClick={() => setLightbox(null)}
+          >
+            Close
+          </button>
+        </div>
+      )}
     </div>
   );
 }
