@@ -133,14 +133,24 @@ export default function VisitPage({
         >
           ‹ {visit.store_name}
         </Link>
-        <h1 className="text-xl font-extrabold text-ink-700 leading-tight">
-          {fmtDate(visit.visit_date)}
-        </h1>
-        <p className="text-xs text-ink-300 mt-0.5">
-          {visit.store_name}
-          {visit.edited_at && <> · edited</>}
-          {" · "}{filled.length}/5 sections
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl font-extrabold text-ink-700 leading-tight">
+              {fmtDate(visit.visit_date)}
+            </h1>
+            <p className="text-xs text-ink-300 mt-0.5">
+              {visit.store_name}
+              {visit.edited_at && <> · edited</>}
+              {" · "}{filled.length}/5 sections
+            </p>
+          </div>
+          <Link
+            href={`/m/visit/${visit.id}/edit`}
+            className="shrink-0 rounded-xl bg-ink-50 px-3 py-1.5 text-[11px] font-bold text-ink-400 active:bg-ink-100"
+          >
+            Edit
+          </Link>
+        </div>
       </header>
 
       {/* Photos */}
