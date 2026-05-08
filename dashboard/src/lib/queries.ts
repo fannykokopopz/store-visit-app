@@ -134,7 +134,7 @@ export async function getVisitsFeed(opts: {
 
   let q = supabase
     .from("visits")
-    .select("*, stores(name, chain, tier), cms(name)", { count: "exact" })
+    .select("*, stores(name, chain, tier), cms(full_name)", { count: "exact" })
     .eq("is_locked", true)
     .order("visit_date", { ascending: false })
     .order("created_at", { ascending: false })
@@ -164,7 +164,7 @@ export async function getVisitsFeed(opts: {
       id: row.id,
       visit_date: row.visit_date,
       cm_telegram_id: row.cm_telegram_id,
-      cm_name: row.cms?.name ?? "Unknown",
+      cm_name: row.cms?.full_name ?? "Unknown",
       store_id: row.store_id,
       store_name: row.stores?.name ?? "Unknown",
       store_chain: row.stores?.chain ?? "",
@@ -201,8 +201,8 @@ export async function getVisitsFeed(opts: {
 }
 
 export async function getCMsList(): Promise<CMOption[]> {
-  const { data } = await supabase.from("cms").select("telegram_id, name").order("name");
-  return (data ?? []) as CMOption[];
+  const { data } = await supabase.from("cms").select("telegram_id, full_name").order("full_name");
+  return (data ?? []).map((r: { telegram_id: number; full_name: string }) => ({ telegram_id: r.telegram_id, name: r.full_name }));
 }
 
 export async function getStoresList(): Promise<StoreOption[]> {
