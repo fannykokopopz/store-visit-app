@@ -32,4 +32,7 @@ export const config = {
   dashboard: {
     url: optional('DASHBOARD_URL'),
   },
+  miniapp: {
+    url: optional('MINIAPP_URL'),
+  },
 } as const;

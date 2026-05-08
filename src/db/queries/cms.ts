@@ -3,6 +3,7 @@ import { supabase } from '../client.js';
 export interface CM {
   telegram_id: number;
   full_name: string;
+  nickname: string | null;
   role: 'cm' | 'cmic' | 'am' | 'admin';
   market: 'SG' | 'TH' | 'MY' | 'HK';
   am_telegram_id: number | null;
@@ -49,6 +50,19 @@ export async function createCM(data: {
     return null;
   }
   return row as CM;
+}
+
+export async function updateNickname(telegramId: number, nickname: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('cms')
+    .update({ nickname })
+    .eq('telegram_id', telegramId);
+
+  if (error) {
+    console.error('updateNickname error:', error);
+    return false;
+  }
+  return true;
 }
 
 export async function deactivateCM(telegramId: number): Promise<boolean> {

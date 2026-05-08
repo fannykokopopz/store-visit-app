@@ -5,7 +5,7 @@ import { getStoresForCM } from '../../db/queries/stores.js';
 import { searchStoresByName, getStoreById } from '../../db/queries/stores.js';
 import { createVisit, lockVisit, attachVisitSections, getLastVisitDatePerStore } from '../../db/queries/visits.js';
 import { getActivePlan, consumePlan } from '../../db/queries/visit-plans.js';
-import { buildStorePicker, buildSearchResultsPicker } from '../keyboards/store-picker.js';
+import { buildStorePicker, buildSearchResultsPicker, buildStoreContextMessage } from '../keyboards/store-picker.js';
 import { buildTemplateMessage } from '../../utils/template.js';
 import { parseTemplate, filledCount } from '../../utils/parse-template.js';
 import { startPhotoCollection } from '../photo-collection.js';
@@ -26,45 +26,70 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   });
 
   if (stores.length === 0) {
-    await ctx.reply("No stores assigned to you yet. Ask your manager to set this up.");
+    await ctx.reply("No stores assigned yet — ask your manager to set this up 🙏");
     return;
   }
 
+  // Show context message with last-visit info, then picker with clean button labels
+  await ctx.reply(buildStoreContextMessage(stores, lastVisits));
+
+  let page = 0;
   await ctx.reply('Which store did you visit?', {
-    reply_markup: buildStorePicker(stores, lastVisits),
+    reply_markup: buildStorePicker(stores, lastVisits, page),
   });
 
   let storeId = '';
   let storeName = '';
 
   storeLoop: while (true) {
-    const response = await conversation.waitForCallbackQuery(/^(store:|search:|cancel$)/);
-    const data = response.callbackQuery.data;
+    // Use conversation.wait() instead of waitForCallbackQuery so that a typed
+    // /cancel still exits even if the picker message was deleted.
+    const update = await conversation.wait();
 
-    if (data === 'cancel') {
-      await response.answerCallbackQuery();
-      await ctx.reply('No worries — visit cancelled.');
+    if (update.message?.text === '/cancel') {
+      await ctx.reply("No worries — come back whenever you're ready 👋");
       return;
     }
 
+    if (!update.callbackQuery) continue;
+
+    const data = update.callbackQuery.data ?? '';
+
+    if (data === 'cancel') {
+      await update.answerCallbackQuery();
+      await ctx.reply("No worries — come back whenever you're ready 👋");
+      return;
+    }
+
+    // Pagination — re-render the same picker message with a new page
+    if (data.startsWith('page:')) {
+      page = parseInt(data.replace('page:', ''), 10);
+      await update.answerCallbackQuery();
+      await update.editMessageReplyMarkup({
+        reply_markup: buildStorePicker(stores, lastVisits, page),
+      });
+      continue;
+    }
+
     if (data === 'search:stores') {
-      await response.answerCallbackQuery();
+      await update.answerCallbackQuery();
       await ctx.reply('Type part of the store name:');
 
       while (true) {
         const searchMsg = await conversation.wait();
         if (searchMsg.message?.text === '/cancel') {
-          await ctx.reply('No worries — visit cancelled.');
+          await ctx.reply("No worries — come back whenever you're ready 👋");
           return;
         }
 
         const term = searchMsg.message?.text?.trim();
         if (!term) continue;
 
-        const results = await conversation.external(() => searchStoresByName('SG', term));
+        const market = ctx.user?.market ?? 'SG';
+        const results = await conversation.external(() => searchStoresByName(market, term));
 
         if (results.length === 0) {
-          await ctx.reply("No stores found. Try a different search term.", {
+          await ctx.reply("No stores found — try a different search term.", {
             reply_markup: new InlineKeyboard()
               .text('← Back to my stores', 'search:back').row()
               .text('Cancel', 'cancel'),
@@ -75,27 +100,37 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
           });
         }
 
-        const pick = await conversation.waitForCallbackQuery(/^(store:|search:back|cancel$)/);
+        const pick = await conversation.wait();
 
-        if (pick.callbackQuery.data === 'cancel') {
-          await pick.answerCallbackQuery();
-          await ctx.reply('No worries — visit cancelled.');
+        if (pick.message?.text === '/cancel') {
+          await ctx.reply("No worries — come back whenever you're ready 👋");
           return;
         }
-        if (pick.callbackQuery.data === 'search:back') {
+        if (!pick.callbackQuery) continue;
+
+        const pickData = pick.callbackQuery.data ?? '';
+
+        if (pickData === 'cancel') {
+          await pick.answerCallbackQuery();
+          await ctx.reply("No worries — come back whenever you're ready 👋");
+          return;
+        }
+        if (pickData === 'search:back') {
           await pick.answerCallbackQuery();
           await ctx.reply('Which store did you visit?', {
-            reply_markup: buildStorePicker(stores, lastVisits),
+            reply_markup: buildStorePicker(stores, lastVisits, page),
           });
           continue storeLoop;
         }
 
-        storeId = pick.callbackQuery.data.replace('store:', '');
-        const found = await conversation.external(() => getStoreById(storeId));
-        if (!found) continue;
-        storeName = found.name;
-        await pick.answerCallbackQuery();
-        break storeLoop;
+        if (pickData.startsWith('store:')) {
+          storeId = pickData.replace('store:', '');
+          const found = await conversation.external(() => getStoreById(storeId));
+          if (!found) continue;
+          storeName = found.name;
+          await pick.answerCallbackQuery();
+          break storeLoop;
+        }
       }
     }
 
@@ -109,7 +144,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
         if (!fetched) continue;
         storeName = fetched.name;
       }
-      await response.answerCallbackQuery();
+      await update.answerCallbackQuery();
       break;
     }
   }
@@ -122,7 +157,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
   await ctx.reply(buildTemplateMessage(storeName), { parse_mode: 'MarkdownV2' });
   await ctx.reply(
-    'Fill in each section and send it back\\. Photos? Attach them to the same message \\(album works\\)\\.\nType /cancel to stop\\.',
+    'Copy the template above, fill it in, and send it back\\. You can attach photos to the same message 📸\n/cancel to stop\\.',
     { parse_mode: 'MarkdownV2' },
   );
 
@@ -157,7 +192,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
     const text = msg.message?.caption ?? msg.message?.text ?? null;
     if (!text) {
-      await ctx.reply('Send your filled template as a text message. Type /cancel to stop.');
+      await ctx.reply("Send the filled template as a text message. /cancel to stop.");
       continue;
     }
 
@@ -180,7 +215,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   );
 
   if (!visit) {
-    await ctx.reply("Something went wrong saving your visit. Give /visit another try.");
+    await ctx.reply("Something went wrong — give /visit another try 🙏");
     return;
   }
 
@@ -195,11 +230,11 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   startPhotoCollection(telegramId, visit.id, storeId, storeName, filled, firstPhotoFileId);
 
   const photoLine = firstPhotoFileId
-    ? `\n\n📸 Photos received — saving in the background\\. You'll get a confirmation shortly\\.`
+    ? `\n\n📸 Photos received — saving them in the background\\.`
     : '';
 
   await ctx.reply(
-    `✅ *Visit saved — ${storeName}*${photoLine}`,
+    `🎉 *Done\\! ${storeName} is logged\\.* Nice work out there${photoLine}`,
     { parse_mode: 'MarkdownV2' },
   );
 }

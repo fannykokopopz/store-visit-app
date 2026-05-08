@@ -1,6 +1,8 @@
 import { InlineKeyboard } from 'grammy';
 import { Store } from '../../db/queries/stores.js';
 
+export const STORE_PAGE_SIZE = 6;
+
 function daysSince(dateStr: string): number {
   const diff = Date.now() - new Date(dateStr).getTime();
   return Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -10,20 +12,45 @@ function lastVisitLabel(storeId: string, lastVisits: Record<string, string>): st
   const date = lastVisits[storeId];
   if (!date) return 'never visited';
   const days = daysSince(date);
-  if (days === 0) return 'visited today';
+  if (days === 0) return 'today';
   if (days === 1) return '1d ago';
   return `${days}d ago`;
+}
+
+export function buildStoreContextMessage(
+  stores: Store[],
+  lastVisits: Record<string, string> = {},
+): string {
+  const lines = stores.map(s => {
+    const label = lastVisitLabel(s.id, lastVisits);
+    return `${s.name} · ${label}`;
+  });
+  return `Your stores 🏪\n\n${lines.join('\n')}`;
 }
 
 export function buildStorePicker(
   stores: Store[],
   lastVisits: Record<string, string> = {},
+  page = 0,
 ): InlineKeyboard {
   const kb = new InlineKeyboard();
+  const totalPages = Math.ceil(stores.length / STORE_PAGE_SIZE);
+  const pageStores = stores.slice(page * STORE_PAGE_SIZE, (page + 1) * STORE_PAGE_SIZE);
 
-  for (const store of stores) {
-    const label = `${store.name} · ${lastVisitLabel(store.id, lastVisits)}`;
-    kb.text(label, `store:${store.id}`).row();
+  for (const store of pageStores) {
+    kb.text(store.name, `store:${store.id}`).row();
+  }
+
+  if (totalPages > 1) {
+    const prevBtn = page > 0;
+    const nextBtn = page < totalPages - 1;
+    if (prevBtn && nextBtn) {
+      kb.text('← Back', `page:${page - 1}`).text(`Next →`, `page:${page + 1}`).row();
+    } else if (prevBtn) {
+      kb.text('← Back', `page:${page - 1}`).row();
+    } else if (nextBtn) {
+      kb.text(`Next →`, `page:${page + 1}`).row();
+    }
   }
 
   kb.text('🔍 Other store', 'search:stores').row();

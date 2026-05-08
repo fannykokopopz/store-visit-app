@@ -4,41 +4,20 @@ export async function handleHelp(ctx: BotContext): Promise<void> {
   const isAdmin = ctx.user?.role === 'admin';
 
   const adminBlock = isAdmin
-    ? `\n🛠 *Admin*\n` +
+    ? `\n🛠 *Admin commands*\n` +
       `/grantaccess — add a CM\n` +
       `/revokeaccess — remove a CM\n` +
-      `/listaccess — list all active CMs\n\n`
+      `/listaccess — list all active CMs\n`
     : '';
 
   await ctx.reply(
-    `📱 *Commands*\n\n` +
-    `📍 /visit — log a new store visit\n` +
-    `👤 /myprofile — your profile, stores & recent visits\n` +
-    `📊 /dashboard — open the AM dashboard\n` +
+    `Here's what I can do 👇\n\n` +
+    `🏪 /visit — log a store visit\n` +
+    `📊 /dashboard — open the team dashboard\n` +
+    `✏️ /nickname — set your display name\n` +
     `🚫 /cancel — stop what you're doing\n` +
-    `❓ /help — show this\n` +
     adminBlock + `\n` +
-    `📝 *How to write great visit notes*\n\n` +
-    `You'll get a 6-section template. Here's what goes in each:\n\n` +
-    `🌟 *Good News*\n` +
-    `Wins, great staff moments, strong sales.\n` +
-    `_e.g. "Aisyah upsold a Sonos Move to a walk-in today."_\n\n` +
-    `🔍 *Competitors' Insights*\n` +
-    `What other brands are doing — promos, demos, shelf changes.\n` +
-    `_e.g. "Bose had a promoter in doing live QC45 demos."_\n\n` +
-    `📦 *Display & Stock*\n` +
-    `Demo unit condition, display quality, shelf space won or lost.\n` +
-    `_e.g. "Era 300 demo cracked — needs replacement. Arc end-cap looks great."_\n\n` +
-    `✅ *What to Follow Up*\n` +
-    `Action items for you or the team before your next visit.\n` +
-    `_e.g. "Check if replacement unit arrived. Follow up with James on Trueplay."_\n\n` +
-    `⚡ *Buzz Plan*\n` +
-    `Your tactic for driving sales at this store.\n` +
-    `_e.g. "Offered the team a dinner if they hit 10K this month."_\n\n` +
-    `🎓 *Training*\n` +
-    `Who you trained and what you covered.\n` +
-    `_e.g. "Wei Jie — Kilburn III demo and upsell script."_\n\n` +
-    `💡 *Tip:* Names, models, and numbers make your notes 10x more useful.`,
+    `💡 *Quick tip:* When you /visit, you'll get a 6-section template — Good News, Competitors, Display & Stock, Follow Up, Buzz Plan, Training. Fill in what you can. Names, numbers, and specifics make your notes 10× more useful.`,
     { parse_mode: 'Markdown' },
   );
 }

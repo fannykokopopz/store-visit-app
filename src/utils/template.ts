@@ -24,7 +24,8 @@ export function buildTemplateMessage(storeName: string): string {
   });
   return (
     `📋 *${storeName} — ${date}*\n\n` +
-    `Copy, fill in each section, and send back\\. Attach photos to the same message\\.\n\n` +
+    `Fill in what you can — even quick notes help the team 💪\n` +
+    `Copy the template, fill it in, and send it back\\. Photos? Add them to the same message 📸\n\n` +
     `\`\`\`\n${VISIT_TEMPLATE}\`\`\``
   );
 }

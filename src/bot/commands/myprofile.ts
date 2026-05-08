@@ -63,8 +63,10 @@ export async function handleMyProfile(ctx: BotContext): Promise<void> {
   const user = requireAuth(ctx);
   if (!user) return;
 
-  const { text, keyboard } = await buildProfileContent(user.telegram_id, user);
-  await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+  await ctx.reply(
+    "Your stores and visit history are in the mini app 📱\n\n" +
+    "Open it from the menu button at the top of this chat.",
+  );
 }
 
 export async function handleProfileStores(ctx: BotContext): Promise<void> {

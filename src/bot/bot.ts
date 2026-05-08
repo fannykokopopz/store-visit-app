@@ -3,6 +3,7 @@ import { conversations, createConversation } from '@grammyjs/conversations';
 import { config } from '../config.js';
 import { BotContext, authMiddleware, requireAuth } from './middleware/auth.js';
 import { handleStart } from './commands/start.js';
+import { handleNickname } from './commands/nickname.js';
 import { handleMyProfile, handleProfileStores, handleProfileVisits, handleProfileBack } from './commands/myprofile.js';
 import { handleCancel } from './commands/cancel.js';
 import { handleGrantAccess } from './commands/admin/grant.js';
@@ -27,6 +28,7 @@ export function createBot(): Bot<BotContext> {
   bot.use(createConversation(visitFlow));
 
   bot.command('start', handleStart);
+  bot.command('nickname', handleNickname);
   bot.command('myprofile', handleMyProfile);
   bot.command('cancel', handleCancel);
 
@@ -58,7 +60,7 @@ export function createBot(): Bot<BotContext> {
 
     if (text === '/cancel') {
       clearEditSession(telegramId);
-      await ctx.reply('Edit cancelled.');
+      await ctx.reply("Edit cancelled — no changes made 👍");
       return;
     }
 
@@ -68,9 +70,9 @@ export function createBot(): Bot<BotContext> {
     const ok = await updateVisitSections(session.visitId, sections);
 
     if (ok) {
-      await ctx.reply(`✅ Visit updated — ${session.storeName}\n📝 ${filled}/6 sections filled`);
+      await ctx.reply(`✅ Updated — ${session.storeName} · ${filled}/6 sections`);
     } else {
-      await ctx.reply('Something went wrong updating your visit. Please try again.');
+      await ctx.reply("Something went wrong — give it another try 🙏");
     }
   });
 
@@ -95,7 +97,7 @@ export function createBot(): Bot<BotContext> {
 
   // Confirm button — visit is already saved; this closes the action bar
   bot.callbackQuery(/^confirm_visit:/, async (ctx) => {
-    await ctx.answerCallbackQuery('Visit confirmed! ✅');
+    await ctx.answerCallbackQuery('Confirmed ✅');
     await ctx.editMessageReplyMarkup({ reply_markup: undefined });
   });
 
@@ -116,8 +118,8 @@ export function createBot(): Bot<BotContext> {
     startEditSession(ctx.from.id, visitId, info.store_name);
     await ctx.answerCallbackQuery();
     await ctx.reply(
-      `Send your updated notes for *${info.store_name}* and I'll replace the current entry\\.\n\n` +
-      `\`\`\`\n1️⃣ Good News\n\n\n2️⃣ Competitors' Insights\n\n\n3️⃣ Display & Stock\n\n\n4️⃣ What to Follow Up\n\n\n5️⃣ Buzz Plan\n\n\n6️⃣ Training\n\`\`\`\n\nType /cancel to abort\\.`,
+      `Send your updated notes for *${info.store_name}* and I'll swap them in 🔄\n\n` +
+      `\`\`\`\n1️⃣ Good News\n\n\n2️⃣ Competitors' Insights\n\n\n3️⃣ Display & Stock\n\n\n4️⃣ What to Follow Up\n\n\n5️⃣ Buzz Plan\n\n\n6️⃣ Training\n\`\`\`\n\n/cancel to stop\\.`,
       { parse_mode: 'MarkdownV2' },
     );
   });
@@ -137,7 +139,7 @@ export function createBot(): Bot<BotContext> {
     }
 
     await ctx.answerCallbackQuery();
-    await ctx.reply(`Delete the visit to *${info.store_name}*? This cannot be undone\\.`, {
+    await ctx.reply(`Delete the visit to *${info.store_name}*? This can't be undone\\.`, {
       parse_mode: 'MarkdownV2',
       reply_markup: new InlineKeyboard()
         .text('Yes, delete', `confirm_delete:${visitId}`)
@@ -161,7 +163,7 @@ export function createBot(): Bot<BotContext> {
     if (ok) {
       await ctx.editMessageText('🗑️ Visit deleted.');
     } else {
-      await ctx.reply('Something went wrong. Please try again.');
+      await ctx.reply("Something went wrong — give it another try 🙏");
     }
   });
 
