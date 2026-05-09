@@ -49,11 +49,7 @@ function fmtDate(d: string) {
   return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export default function StoreDashboardPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default function StoreDashboardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
 
   const [user,        setUser]        = useState<User | null>(null);
@@ -62,7 +58,6 @@ export default function StoreDashboardPage({
   const [loading,     setLoading]     = useState(true);
   const [galleryMode, setGalleryMode] = useState(false);
   const [lightbox,    setLightbox]    = useState<string | null>(null);
-  const [expanded,    setExpanded]    = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => { if (d) setUser(d); });
@@ -81,8 +76,8 @@ export default function StoreDashboardPage({
   if (!user) return null;
 
   const tier = store?.tier ?? null;
-  const ts = tier ? TIER_STYLE[tier] : TIER_STYLE.T4;
-  const allPhotos = visits.flatMap(v => v.photo_urls.map(url => ({ url, visitDate: v.visit_date, cm: v.cm_name })));
+  const ts   = tier ? TIER_STYLE[tier] : TIER_STYLE.T4;
+  const allPhotos = visits.flatMap(v => v.photo_urls.map(url => ({ url, visitDate: v.visit_date })));
   const hasPhotos = allPhotos.length > 0;
 
   return (
@@ -90,7 +85,6 @@ export default function StoreDashboardPage({
       <NavBar user={user} />
       <div className="page-content" style={{ maxWidth: 900 }}>
 
-        {/* Back link */}
         <Link
           href="/visits"
           style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, color: "var(--color-ink-400)", fontWeight: 600, marginBottom: 20, textDecoration: "none" }}
@@ -111,21 +105,14 @@ export default function StoreDashboardPage({
           <>
             {/* Store header */}
             <div className="store-detail-header">
-              <div
-                className="store-detail-tier"
-                style={{ background: ts.bg, color: ts.color }}
-              >
+              <div className="store-detail-tier" style={{ background: ts.bg, color: ts.color }}>
                 {store.tier ?? "—"}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h1 className="store-detail-name">{store.name}</h1>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                  <span className="tier-badge" style={{ background: ts.bg, color: ts.color }}>
-                    {store.chain}
-                  </span>
-                  <span style={{ fontSize: 12, color: "var(--color-ink-300)", fontWeight: 500 }}>
-                    {store.market}
-                  </span>
+                  <span className="tier-badge" style={{ background: ts.bg, color: ts.color }}>{store.chain}</span>
+                  <span style={{ fontSize: 12, color: "var(--color-ink-300)", fontWeight: 500 }}>{store.market}</span>
                   {visits.length > 0 && (
                     <span style={{ fontSize: 12, color: "var(--color-ink-300)" }}>
                       · Last visited {fmtDate(visits[0].visit_date)}
@@ -135,7 +122,6 @@ export default function StoreDashboardPage({
               </div>
             </div>
 
-            {/* Visits section */}
             {visits.length === 0 ? (
               <div className="empty-state">
                 <p className="empty-state-icon">🗓</p>
@@ -149,42 +135,29 @@ export default function StoreDashboardPage({
                     {visits.length} visit{visits.length !== 1 ? "s" : ""}
                   </span>
                   {hasPhotos && (
-                    <button
-                      className="gallery-toggle-btn"
-                      onClick={() => setGalleryMode(m => !m)}
-                    >
+                    <button className="gallery-toggle-btn" onClick={() => setGalleryMode(m => !m)}>
                       {galleryMode ? "≡ List" : "⊞ Gallery"}
                     </button>
                   )}
                 </div>
 
                 {galleryMode ? (
-                  /* Gallery grid */
                   <div className="photo-gallery-grid">
                     {allPhotos.map((p, i) => (
-                      <button
-                        key={i}
-                        className="gallery-cell"
-                        onClick={() => setLightbox(p.url)}
-                      >
+                      <button key={i} className="gallery-cell" onClick={() => setLightbox(p.url)}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={p.url} alt="" />
                       </button>
                     ))}
                   </div>
                 ) : (
-                  /* List view */
                   <div>
                     {visits.map(v => {
-                      const isExpanded = expanded === v.id;
                       const filledSections = SECTIONS.filter(s => v[s.key]);
                       return (
                         <div key={v.id} className="visit-card">
-                          <div
-                            className="visit-card-header"
-                            onClick={() => setExpanded(isExpanded ? null : v.id)}
-                            style={{ background: isExpanded ? "var(--color-ink-50)" : undefined }}
-                          >
+                          {/* Header */}
+                          <div className="visit-card-header" style={{ cursor: "default" }}>
                             <div className="visit-card-store">
                               <p className="visit-store-name">{fmtDate(v.visit_date)}</p>
                               <div className="visit-meta-row">
@@ -203,63 +176,52 @@ export default function StoreDashboardPage({
                                         <span
                                           key={i}
                                           className="visit-section-dot"
-                                          style={{
-                                            background: i < filledSections.length
-                                              ? "var(--color-tc-500)"
-                                              : "var(--color-ink-100)",
-                                          }}
+                                          style={{ background: i < filledSections.length ? "var(--color-tc-500)" : "var(--color-ink-100)" }}
                                         />
                                       ))}
-                                      <span className="visit-meta-item" style={{ marginLeft: 4 }}>
-                                        {filledSections.length}/6
-                                      </span>
+                                      <span className="visit-meta-item" style={{ marginLeft: 4 }}>{filledSections.length}/6</span>
                                     </span>
                                   </>
                                 )}
                               </div>
                             </div>
-                            <span className="visit-chevron">{isExpanded ? "▲" : "▼"}</span>
                           </div>
 
-                          {isExpanded && (
-                            <div className="visit-detail">
-                              {/* Photo strip */}
-                              {v.photo_urls.length > 0 && (
-                                <div className="photo-strip-wrap">
-                                  <div className="photo-strip">
-                                    {v.photo_urls.map((url, i) => (
-                                      <button key={i} className="photo-thumb" onClick={() => setLightbox(url)}>
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img src={url} alt={`Photo ${i + 1}`} />
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
-                              {filledSections.length === 0 ? (
-                                <p style={{ fontSize: 13, color: "var(--color-ink-300)", paddingTop: 14 }}>
-                                  No notes were added for this visit.
-                                </p>
-                              ) : (
-                                <div className="visit-sections-grid">
-                                  {filledSections.map(s => (
-                                    <div
-                                      key={s.key}
-                                      className="visit-section-card"
-                                      style={{ background: s.bg, border: `1px solid ${s.border}` }}
-                                    >
-                                      <div className="visit-section-label" style={{ color: s.color }}>
-                                        <span>{s.icon}</span>
-                                        <span>{s.label}</span>
-                                      </div>
-                                      <p className="visit-section-text">{v[s.key]}</p>
-                                    </div>
+                          {/* Always-visible body */}
+                          <div className="visit-detail">
+                            {v.photo_urls.length > 0 && (
+                              <div className="photo-strip-wrap">
+                                <div className="photo-strip">
+                                  {v.photo_urls.map((url, i) => (
+                                    <button key={i} className="photo-thumb" onClick={() => setLightbox(url)}>
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img src={url} alt={`Photo ${i + 1}`} />
+                                    </button>
                                   ))}
                                 </div>
-                              )}
-                            </div>
-                          )}
+                              </div>
+                            )}
+                            {filledSections.length === 0 ? (
+                              <p style={{ fontSize: 13, color: "var(--color-ink-300)", paddingTop: v.photo_urls.length > 0 ? 8 : 14 }}>
+                                No notes were added for this visit.
+                              </p>
+                            ) : (
+                              <div className="visit-sections-grid" style={{ paddingTop: v.photo_urls.length > 0 ? 8 : 14 }}>
+                                {filledSections.map(s => (
+                                  <div
+                                    key={s.key}
+                                    className="visit-section-card"
+                                    style={{ background: s.bg, border: `1px solid ${s.border}` }}
+                                  >
+                                    <div className="visit-section-label" style={{ color: s.color }}>
+                                      <span>{s.icon}</span><span>{s.label}</span>
+                                    </div>
+                                    <p className="visit-section-text">{v[s.key]}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -271,7 +233,6 @@ export default function StoreDashboardPage({
         )}
       </div>
 
-      {/* Lightbox */}
       {lightbox && (
         <div className="lightbox-overlay" onClick={() => setLightbox(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}

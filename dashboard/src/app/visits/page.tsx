@@ -21,6 +21,7 @@ interface VisitRow {
   buzz_plan: string | null;
   training: string | null;
   photo_count: number;
+  photo_urls: string[];
   sections_filled: number;
   edited_at: string | null;
 }
@@ -73,8 +74,7 @@ function weekLabel(monday: Date): string {
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
   const fmtDay = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-  const year = monday.getFullYear();
-  return `${fmtDay(monday)} – ${fmtDay(sunday)} ${year}`;
+  return `${fmtDay(monday)} – ${fmtDay(sunday)} ${monday.getFullYear()}`;
 }
 
 function fmtDate(d: string) {
@@ -82,38 +82,31 @@ function fmtDate(d: string) {
 }
 
 export default function VisitsPage() {
-  const [user,     setUser]     = useState<User | null>(null);
-  const [visits,   setVisits]   = useState<VisitRow[]>([]);
-  const [total,    setTotal]    = useState(0);
-  const [loading,  setLoading]  = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [cms,      setCms]      = useState<CMOption[]>([]);
-  const [market,   setMarket]   = useState<Market>("ALL");
-  const [filterCM, setFilterCM] = useState("");
+  const [user,       setUser]       = useState<User | null>(null);
+  const [visits,     setVisits]     = useState<VisitRow[]>([]);
+  const [total,      setTotal]      = useState(0);
+  const [loading,    setLoading]    = useState(false);
+  const [cms,        setCms]        = useState<CMOption[]>([]);
+  const [market,     setMarket]     = useState<Market>("ALL");
+  const [filterCM,   setFilterCM]   = useState("");
   const [weekOffset, setWeekOffset] = useState(0);
+  const [lightbox,   setLightbox]   = useState<string | null>(null);
 
-  // Photo state
-  const [photoCache,   setPhotoCache]   = useState<Record<string, string[]>>({});
-  const [photosLoading, setPhotosLoading] = useState<Record<string, boolean>>({});
-  const [lightbox,     setLightbox]     = useState<string | null>(null);
-
-  const thisMonday = getMonday(new Date());
+  const thisMonday    = getMonday(new Date());
   const currentMonday = addWeeks(thisMonday, weekOffset);
   const currentSunday = new Date(currentMonday);
   currentSunday.setDate(currentMonday.getDate() + 6);
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => { if (d) setUser(d); });
-    fetch("/api/filters").then(r => r.ok ? r.json() : null).then(d => {
-      if (d) setCms(d.cms);
-    });
+    fetch("/api/filters").then(r => r.ok ? r.json() : null).then(d => { if (d) setCms(d.cms); });
   }, []);
 
   const fetchVisits = useCallback(async () => {
     setLoading(true);
     const p = new URLSearchParams();
     p.set("from", toISO(currentMonday));
-    p.set("to", toISO(currentSunday));
+    p.set("to",   toISO(currentSunday));
     if (market !== "ALL") p.set("market", market);
     if (filterCM) p.set("cm", filterCM);
     const res = await fetch(`/api/visits?${p}`);
@@ -123,27 +116,9 @@ export default function VisitsPage() {
       setTotal(data.total);
     }
     setLoading(false);
-    setExpanded(null);
   }, [market, filterCM, weekOffset]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchVisits(); }, [fetchVisits]);
-
-  async function loadPhotos(visitId: string) {
-    if (photoCache[visitId] || photosLoading[visitId]) return;
-    setPhotosLoading(prev => ({ ...prev, [visitId]: true }));
-    const res = await fetch(`/api/visits/${visitId}`);
-    if (res.ok) {
-      const data = await res.json();
-      setPhotoCache(prev => ({ ...prev, [visitId]: data.photoUrls }));
-    }
-    setPhotosLoading(prev => ({ ...prev, [visitId]: false }));
-  }
-
-  function handleExpand(visitId: string, photoCount: number) {
-    const next = expanded === visitId ? null : visitId;
-    setExpanded(next);
-    if (next && photoCount > 0) loadPhotos(visitId);
-  }
 
   if (!user) return null;
 
@@ -163,10 +138,8 @@ export default function VisitsPage() {
           </p>
         </div>
 
-        {/* Controls row */}
+        {/* Controls */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-
-          {/* Market chips */}
           <div className="market-chips">
             {MARKET_OPTIONS.map(({ value, label }) => (
               <button
@@ -178,36 +151,21 @@ export default function VisitsPage() {
               </button>
             ))}
           </div>
-
           <div style={{ flex: 1 }} />
-
-          {/* Week navigation */}
           <div className="week-nav">
             <button className="week-btn" onClick={() => setWeekOffset(w => w - 1)}>‹</button>
-            <span className="week-label">
-              {isCurrentWeek ? "This week" : weekLabel(currentMonday)}
-            </span>
-            <button
-              className="week-btn"
-              disabled={isFutureWeek}
-              onClick={() => setWeekOffset(w => w + 1)}
-            >›</button>
+            <span className="week-label">{isCurrentWeek ? "This week" : weekLabel(currentMonday)}</span>
+            <button className="week-btn" disabled={isFutureWeek} onClick={() => setWeekOffset(w => w + 1)}>›</button>
           </div>
-
-          {/* CM filter */}
           {cms.length > 0 && (
-            <select
-              value={filterCM}
-              onChange={e => setFilterCM(e.target.value)}
-              className="filter-select"
-            >
+            <select value={filterCM} onChange={e => setFilterCM(e.target.value)} className="filter-select">
               <option value="">All CMs</option>
               {cms.map(c => <option key={c.telegram_id} value={c.telegram_id}>{c.name}</option>)}
             </select>
           )}
         </div>
 
-        {/* Visit feed */}
+        {/* Feed */}
         {loading ? (
           <div className="empty-state">
             <p style={{ color: "var(--color-ink-300)", fontSize: 13 }}>Loading…</p>
@@ -221,29 +179,20 @@ export default function VisitsPage() {
           <div>
             {visits.map(v => {
               const tier = v.store_tier;
-              const ts = tier ? TIER_STYLE[tier] : null;
-              const isExpanded = expanded === v.id;
+              const ts   = tier ? TIER_STYLE[tier] : null;
               const filledSections = SECTIONS.filter(s => v[s.key]);
-              const photos = photoCache[v.id] ?? [];
 
               return (
                 <div key={v.id} className="visit-card">
-                  {/* Card header */}
-                  <div
-                    className="visit-card-header"
-                    onClick={() => handleExpand(v.id, v.photo_count)}
-                    style={{ background: isExpanded ? "var(--color-ink-50)" : undefined }}
-                  >
+                  {/* Header */}
+                  <div className="visit-card-header" style={{ cursor: "default" }}>
                     {ts && (
-                      <span className="tier-badge" style={{ background: ts.bg, color: ts.color }}>
-                        {tier}
-                      </span>
+                      <span className="tier-badge" style={{ background: ts.bg, color: ts.color }}>{tier}</span>
                     )}
                     <div className="visit-card-store">
                       <Link
                         href={`/visits/store/${v.store_id}`}
                         className="visit-store-name visit-store-link"
-                        onClick={e => e.stopPropagation()}
                       >
                         {v.store_name}
                       </Link>
@@ -257,16 +206,10 @@ export default function VisitsPage() {
                             <span
                               key={i}
                               className="visit-section-dot"
-                              style={{
-                                background: i < v.sections_filled
-                                  ? "var(--color-tc-500)"
-                                  : "var(--color-ink-100)",
-                              }}
+                              style={{ background: i < v.sections_filled ? "var(--color-tc-500)" : "var(--color-ink-100)" }}
                             />
                           ))}
-                          <span className="visit-meta-item" style={{ marginLeft: 4 }}>
-                            {v.sections_filled}/6
-                          </span>
+                          <span className="visit-meta-item" style={{ marginLeft: 4 }}>{v.sections_filled}/6</span>
                         </span>
                         {v.photo_count > 0 && (
                           <>
@@ -282,58 +225,46 @@ export default function VisitsPage() {
                         )}
                       </div>
                     </div>
-                    <span className="visit-chevron">{isExpanded ? "▲" : "▼"}</span>
                   </div>
 
-                  {/* Expanded detail */}
-                  {isExpanded && (
-                    <div className="visit-detail">
-                      {/* Photo strip */}
-                      {v.photo_count > 0 && (
-                        <div className="photo-strip-wrap">
-                          {photosLoading[v.id] ? (
-                            <p className="photo-strip-loading">Loading photos…</p>
-                          ) : photos.length > 0 ? (
-                            <div className="photo-strip">
-                              {photos.map((url, i) => (
-                                <button
-                                  key={i}
-                                  className="photo-thumb"
-                                  onClick={() => setLightbox(url)}
-                                >
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={url} alt={`Photo ${i + 1}`} />
-                                </button>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      )}
-
-                      {/* Section cards */}
-                      {filledSections.length === 0 ? (
-                        <p style={{ fontSize: 13, color: "var(--color-ink-300)", paddingTop: 14 }}>
-                          No notes were added for this visit.
-                        </p>
-                      ) : (
-                        <div className="visit-sections-grid">
-                          {filledSections.map(s => (
-                            <div
-                              key={s.key}
-                              className="visit-section-card"
-                              style={{ background: s.bg, border: `1px solid ${s.border}` }}
-                            >
-                              <div className="visit-section-label" style={{ color: s.color }}>
-                                <span>{s.icon}</span>
-                                <span>{s.label}</span>
-                              </div>
-                              <p className="visit-section-text">{v[s.key]}</p>
-                            </div>
+                  {/* Always-visible body */}
+                  <div className="visit-detail">
+                    {/* Photo strip */}
+                    {v.photo_urls.length > 0 && (
+                      <div className="photo-strip-wrap">
+                        <div className="photo-strip">
+                          {v.photo_urls.map((url, i) => (
+                            <button key={i} className="photo-thumb" onClick={() => setLightbox(url)}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt={`Photo ${i + 1}`} />
+                            </button>
                           ))}
                         </div>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    )}
+
+                    {/* Section cards */}
+                    {filledSections.length === 0 ? (
+                      <p style={{ fontSize: 13, color: "var(--color-ink-300)", paddingTop: v.photo_urls.length > 0 ? 8 : 14 }}>
+                        No notes were added for this visit.
+                      </p>
+                    ) : (
+                      <div className="visit-sections-grid" style={{ paddingTop: v.photo_urls.length > 0 ? 8 : 14 }}>
+                        {filledSections.map(s => (
+                          <div
+                            key={s.key}
+                            className="visit-section-card"
+                            style={{ background: s.bg, border: `1px solid ${s.border}` }}
+                          >
+                            <div className="visit-section-label" style={{ color: s.color }}>
+                              <span>{s.icon}</span><span>{s.label}</span>
+                            </div>
+                            <p className="visit-section-text">{v[s.key]}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -343,18 +274,10 @@ export default function VisitsPage() {
 
       {/* Lightbox */}
       {lightbox && (
-        <div
-          className="lightbox-overlay"
-          onClick={() => setLightbox(null)}
-        >
+        <div className="lightbox-overlay" onClick={() => setLightbox(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={lightbox} alt="Photo" className="lightbox-img" />
-          <button
-            className="lightbox-close"
-            onClick={() => setLightbox(null)}
-          >
-            Close
-          </button>
+          <button className="lightbox-close" onClick={() => setLightbox(null)}>Close</button>
         </div>
       )}
     </div>

@@ -14,6 +14,7 @@ interface VisitSummary {
   display_stock: string | null;
   follow_up: string | null;
   buzz_plan: string | null;
+  training: string | null;
   cm_name?: string | null;
   photo_count: number;
   thumb_urls: string[];
@@ -33,12 +34,25 @@ interface StorePayload {
   visits: VisitSummary[];
 }
 
+type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan" | "training";
+
+const SECTIONS: Array<{
+  key: SectionKey;
+  label: string;
+  icon: string;
+  colorClass: string;
+  titleClass: string;
+}> = [
+  { key: "good_news",     label: "Good News",             icon: "🌟", colorClass: "bg-[var(--color-section-amber-bg)] border-[var(--color-section-amber-border)]",   titleClass: "text-[var(--color-tc-600)]" },
+  { key: "competitors",   label: "Competitors' Insights", icon: "🔍", colorClass: "bg-[var(--color-section-blue-bg)] border-[var(--color-section-blue-border)]",    titleClass: "text-[var(--color-tier-t1-fg)]" },
+  { key: "display_stock", label: "Display & Stock",       icon: "📦", colorClass: "bg-[var(--color-section-green-bg)] border-[var(--color-section-green-border)]",  titleClass: "text-[var(--color-tier-t2-fg)]" },
+  { key: "follow_up",     label: "What to Follow Up",     icon: "✅", colorClass: "bg-[var(--color-section-pink-bg)] border-[var(--color-section-pink-border)]",   titleClass: "text-[#C0185A]" },
+  { key: "buzz_plan",     label: "Buzz Plan",             icon: "⚡", colorClass: "bg-[var(--color-section-purple-bg)] border-[var(--color-section-purple-border)]", titleClass: "text-[#5B2DB5]" },
+  { key: "training",      label: "Training",              icon: "🎓", colorClass: "bg-[var(--color-section-teal-bg)] border-[var(--color-section-teal-border)]",    titleClass: "text-[var(--color-section-teal-fg)]" },
+];
+
 function fmtDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return new Date(dateStr).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 const TIER_STYLE: Record<string, string> = {
@@ -59,10 +73,10 @@ export default function StorePage({
   const sp = use(searchParams);
   const allCMs = sp.all === "true";
 
-  const [data, setData] = useState<StorePayload | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [data,       setData]       = useState<StorePayload | null>(null);
+  const [error,      setError]      = useState<string | null>(null);
   const [galleryMode, setGalleryMode] = useState(false);
-  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [lightbox,   setLightbox]   = useState<string | null>(null);
   useSwipeBack();
 
   useEffect(() => {
@@ -97,13 +111,10 @@ export default function StorePage({
 
   const { store, visits } = data;
   const tierStyle = store.tier ? TIER_STYLE[store.tier] : TIER_STYLE.T4;
-  const chainPillStyle = store.tier ? TIER_STYLE[store.tier] : TIER_STYLE.T4;
 
-  // Flatten all photos across all visits for gallery mode
   const allPhotos = visits.flatMap((v) =>
     (v.photo_urls ?? v.thumb_urls).map((url) => ({ url, visitId: v.id, visitDate: v.visit_date }))
   );
-
   const hasPhotos = allPhotos.length > 0;
 
   return (
@@ -118,23 +129,15 @@ export default function StorePage({
             ‹ {allCMs ? "All Stores" : "Portfolio"}
           </Link>
           <div className="flex items-center gap-3">
-            <span
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xs font-extrabold ${tierStyle}`}
-            >
+            <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xs font-extrabold ${tierStyle}`}>
               {store.tier ?? "—"}
             </span>
             <div>
-              <h1 className="text-xl font-extrabold text-ink-700 leading-tight">
-                {store.name}
-              </h1>
+              <h1 className="text-xl font-extrabold text-ink-700 leading-tight">{store.name}</h1>
               <div className="flex items-center gap-2 mt-1">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${chainPillStyle}`}>
-                  {store.chain}
-                </span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tierStyle}`}>{store.chain}</span>
                 {visits.length > 0 && (
-                  <span className="text-[11px] text-ink-300">
-                    Last visited {fmtDate(visits[0].visit_date)}
-                  </span>
+                  <span className="text-[11px] text-ink-300">Last visited {fmtDate(visits[0].visit_date)}</span>
                 )}
               </div>
             </div>
@@ -167,7 +170,6 @@ export default function StorePage({
             </div>
 
             {galleryMode ? (
-              /* Gallery grid */
               <div className="grid grid-cols-3 gap-0.5 px-3.5">
                 {allPhotos.map((p, i) => (
                   <button
@@ -180,10 +182,9 @@ export default function StorePage({
                 ))}
               </div>
             ) : (
-              /* List view */
               <ul className="space-y-2 px-3.5">
                 {visits.map((v) => (
-                  <VisitCard key={v.id} visit={v} showCM={allCMs} />
+                  <VisitCard key={v.id} visit={v} showCM={allCMs} onPhotoClick={setLightbox} />
                 ))}
               </ul>
             )}
@@ -212,34 +213,73 @@ export default function StorePage({
   );
 }
 
-function VisitCard({ visit, showCM }: { visit: VisitSummary; showCM?: boolean }) {
+function VisitCard({
+  visit,
+  showCM,
+  onPhotoClick,
+}: {
+  visit: VisitSummary;
+  showCM?: boolean;
+  onPhotoClick: (url: string) => void;
+}) {
+  const photos = visit.photo_urls ?? visit.thumb_urls;
+  const filledSections = SECTIONS.filter((s) => visit[s.key]);
+
   return (
-    <li>
-      <Link
-        href={`/m/visit/${visit.id}`}
-        className="block rounded-[18px] border border-ink-100 bg-white p-3.5 shadow-sm active:scale-[0.98] transition-transform"
-      >
-        <div className={`flex items-center justify-between ${visit.thumb_urls.length > 0 ? "mb-2.5" : ""}`}>
-          <div>
-            <span className="text-sm font-bold text-ink-700">{fmtDate(visit.visit_date)}</span>
-            {showCM && visit.cm_name && (
-              <span className="ml-2 text-[11px] text-ink-300">{visit.cm_name}</span>
-            )}
-          </div>
-          {visit.photo_count > 0 && (
-            <span className="text-[11px] text-ink-300">📸 {visit.photo_count}</span>
+    <li className="rounded-[18px] border border-ink-100 bg-white p-3.5 shadow-sm">
+      {/* Date + CM + photo count row */}
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <span className="text-sm font-bold text-ink-700">{fmtDate(visit.visit_date)}</span>
+          {showCM && visit.cm_name && (
+            <span className="ml-2 text-[11px] text-ink-300">{visit.cm_name}</span>
           )}
         </div>
-        {visit.thumb_urls.length > 0 && (
-          <div className="flex gap-2">
-            {visit.thumb_urls.map((url, i) => (
-              <div key={i} className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-ink-100">
-                <Image src={url} alt="" fill className="object-cover" sizes="64px" unoptimized />
-              </div>
-            ))}
-          </div>
+        {visit.photo_count > 0 && (
+          <span className="text-[11px] text-ink-300">📸 {visit.photo_count}</span>
         )}
-      </Link>
+      </div>
+
+      {/* Photos — horizontal scroll, bigger thumbnails */}
+      {photos.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 mb-3 scrollbar-hide">
+          {photos.map((url, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onPhotoClick(url)}
+              className="relative h-28 w-28 shrink-0 overflow-hidden rounded-2xl bg-ink-100"
+            >
+              <Image src={url} alt={`Photo ${i + 1}`} fill className="object-cover" sizes="112px" unoptimized />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Sections */}
+      {filledSections.length > 0 && (
+        <div className="space-y-2">
+          {filledSections.map((s) => (
+            <div key={s.key} className={`rounded-[14px] border p-3 ${s.colorClass}`}>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white/60 text-xs">
+                  {s.icon}
+                </span>
+                <span className={`text-[10px] font-extrabold uppercase tracking-wider ${s.titleClass}`}>
+                  {s.label}
+                </span>
+              </div>
+              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-500">
+                {visit[s.key] as string}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {filledSections.length === 0 && photos.length === 0 && (
+        <p className="text-xs text-ink-300">No notes for this visit.</p>
+      )}
     </li>
   );
 }

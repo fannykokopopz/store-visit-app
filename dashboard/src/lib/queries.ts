@@ -16,6 +16,7 @@ export interface VisitRow {
   buzz_plan: string | null;
   training: string | null;
   photo_count: number;
+  photo_urls: string[];
   sections_filled: number;
   edited_at: string | null;
 }
@@ -176,25 +177,37 @@ export async function getVisitsFeed(opts: {
       buzz_plan: row.buzz_plan,
       training: row.training,
       photo_count: 0,
+      photo_urls: [],
       sections_filled: countSections(row),
       edited_at: row.edited_at,
     };
   });
 
-  // Attach photo counts in one query
+  // Attach photo counts + signed URLs in one batch
   if (visits.length > 0) {
     const ids = visits.map((v) => v.id);
     const { data: photos } = await supabase
       .from("visit_photos")
-      .select("visit_id")
-      .in("visit_id", ids);
-    const photoCount = new Map<string, number>();
+      .select("visit_id, storage_path")
+      .in("visit_id", ids)
+      .order("created_at");
+    const pathsByVisit = new Map<string, string[]>();
     for (const p of photos ?? []) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const row = p as any;
-      photoCount.set(row.visit_id, (photoCount.get(row.visit_id) ?? 0) + 1);
+      const paths = pathsByVisit.get(row.visit_id) ?? [];
+      paths.push(row.storage_path as string);
+      pathsByVisit.set(row.visit_id, paths);
     }
-    for (const v of visits) v.photo_count = photoCount.get(v.id) ?? 0;
+    const allPaths = [...pathsByVisit.values()].flat();
+    const signed = await signPhotoUrls(allPaths);
+    const signedMap = new Map<string, string>();
+    allPaths.forEach((p, i) => { if (signed[i]) signedMap.set(p, signed[i]); });
+    for (const v of visits) {
+      const paths = pathsByVisit.get(v.id) ?? [];
+      v.photo_count = paths.length;
+      v.photo_urls = paths.map((p) => signedMap.get(p) ?? "").filter(Boolean);
+    }
   }
 
   return { visits, total: count ?? 0 };
