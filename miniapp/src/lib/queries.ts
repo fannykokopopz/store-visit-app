@@ -28,6 +28,8 @@ export interface VisitSummary {
   photo_count: number;
   thumb_urls: string[];      // first 3, for list view
   photo_urls?: string[];     // all photos, for gallery view
+  grade: 1 | 2 | 3 | null;
+  grade_comments: string | null;
 }
 
 export interface AllMarketStore extends Store {
@@ -141,14 +143,14 @@ export async function getStoreTimelineForCM(
     options?.allCMs
       ? supabase
           .from("visits")
-          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, cm_telegram_id, cms(full_name, nickname)")
+          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, grade, grade_comments, cm_telegram_id, cms(full_name, nickname)")
           .eq("store_id", storeId)
           .eq("is_locked", true)
           .order("visit_date", { ascending: false })
           .order("created_at", { ascending: false })
       : supabase
           .from("visits")
-          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training")
+          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, grade, grade_comments")
           .eq("cm_telegram_id", telegramId)
           .eq("store_id", storeId)
           .eq("is_locked", true)
@@ -205,6 +207,8 @@ export async function getStoreTimelineForCM(
     photo_count: countByVisit.get(v.id) ?? 0,
     thumb_urls: (thumbPathsByVisit.get(v.id) ?? []).map((p) => signedMap.get(p) ?? "").filter(Boolean),
     photo_urls: (allPathsByVisit.get(v.id) ?? []).map((p) => signedMap.get(p) ?? "").filter(Boolean),
+    grade: v.grade ?? null,
+    grade_comments: v.grade_comments ?? null,
   }));
 
   return { store, visits };

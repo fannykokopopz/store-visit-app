@@ -19,7 +19,15 @@ interface VisitSummary {
   photo_count: number;
   thumb_urls: string[];
   photo_urls?: string[];
+  grade: 1 | 2 | 3 | null;
+  grade_comments: string | null;
 }
+
+const GRADE_STYLES: Record<1 | 2 | 3, { label: string; pill: string }> = {
+  1: { label: "Grade 1", pill: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  2: { label: "Grade 2", pill: "bg-amber-50 text-amber-700 border-amber-200" },
+  3: { label: "Grade 3", pill: "bg-rose-50 text-rose-700 border-rose-200" },
+};
 
 interface Store {
   id: string;
@@ -227,18 +235,30 @@ function VisitCard({
 
   return (
     <li className="rounded-[18px] border border-ink-100 bg-white p-3.5 shadow-sm">
-      {/* Date + CM + photo count row */}
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <span className="text-sm font-bold text-ink-700">{fmtDate(visit.visit_date)}</span>
+      {/* Date + CM + grade + photo count row */}
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm font-bold text-ink-700 shrink-0">{fmtDate(visit.visit_date)}</span>
+          {visit.grade && (
+            <span
+              className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-bold shrink-0 ${GRADE_STYLES[visit.grade].pill}`}
+            >
+              {GRADE_STYLES[visit.grade].label}
+            </span>
+          )}
           {showCM && visit.cm_name && (
-            <span className="ml-2 text-[11px] text-ink-300">{visit.cm_name}</span>
+            <span className="text-[11px] text-ink-300 truncate">{visit.cm_name}</span>
           )}
         </div>
         {visit.photo_count > 0 && (
-          <span className="text-[11px] text-ink-300">📸 {visit.photo_count}</span>
+          <span className="text-[11px] text-ink-300 shrink-0">📸 {visit.photo_count}</span>
         )}
       </div>
+      {visit.grade_comments && (
+        <p className="mb-3 whitespace-pre-wrap text-[12px] leading-relaxed text-ink-400">
+          {visit.grade_comments}
+        </p>
+      )}
 
       {/* Photos — horizontal scroll, bigger thumbnails */}
       {photos.length > 0 && (
