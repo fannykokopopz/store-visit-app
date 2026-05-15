@@ -60,49 +60,49 @@ const SECTIONS: Array<{
   key: SectionKey;
   label: string;
   icon: string;
-  colorClass: string;
+  iconBgClass: string;
   titleClass: string;
 }> = [
   {
     key: "good_news",
     label: "Good News",
     icon: "🌟",
-    colorClass: "bg-[var(--color-section-amber-bg)] border-[var(--color-section-amber-border)]",
+    iconBgClass: "bg-[var(--color-section-amber-bg)]",
     titleClass: "text-[var(--color-tc-600)]",
   },
   {
     key: "competitors",
     label: "Competitors' Insights",
     icon: "🔍",
-    colorClass: "bg-[var(--color-section-blue-bg)] border-[var(--color-section-blue-border)]",
+    iconBgClass: "bg-[var(--color-section-blue-bg)]",
     titleClass: "text-[var(--color-tier-t1-fg)]",
   },
   {
     key: "display_stock",
     label: "Display & Stock",
     icon: "📦",
-    colorClass: "bg-[var(--color-section-green-bg)] border-[var(--color-section-green-border)]",
+    iconBgClass: "bg-[var(--color-section-green-bg)]",
     titleClass: "text-[var(--color-tier-t2-fg)]",
   },
   {
     key: "follow_up",
     label: "What to Follow Up",
     icon: "✅",
-    colorClass: "bg-[var(--color-section-pink-bg)] border-[var(--color-section-pink-border)]",
+    iconBgClass: "bg-[var(--color-section-pink-bg)]",
     titleClass: "text-[#C0185A]",
   },
   {
     key: "buzz_plan",
     label: "Buzz Plan",
     icon: "⚡",
-    colorClass: "bg-[var(--color-section-purple-bg)] border-[var(--color-section-purple-border)]",
+    iconBgClass: "bg-[var(--color-section-purple-bg)]",
     titleClass: "text-[#5B2DB5]",
   },
   {
     key: "training",
     label: "Training",
     icon: "🎓",
-    colorClass: "bg-[var(--color-section-teal-bg)] border-[var(--color-section-teal-border)]",
+    iconBgClass: "bg-[var(--color-section-teal-bg)]",
     titleClass: "text-[var(--color-section-teal-fg)]",
   },
 ];
@@ -341,10 +341,10 @@ export default function VisitPage({
           filled.map((s) => (
             <div
               key={s.key}
-              className={`rounded-[18px] border p-4 ${s.colorClass}`}
+              className="rounded-[18px] border border-ink-100 bg-white p-4"
             >
               <div className="flex items-center gap-2 mb-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/60 text-sm">
+                <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm ${s.iconBgClass}`}>
                   {s.icon}
                 </span>
                 <span className={`text-[10px] font-extrabold uppercase tracking-wider ${s.titleClass}`}>
@@ -362,10 +362,10 @@ export default function VisitPage({
       {/* Trained Staff */}
       {trainedStaff.length > 0 && (
         <div className="px-3.5 mt-2">
-          <div className="rounded-[18px] border border-[var(--color-section-teal-border)] bg-[var(--color-section-teal-bg)] p-4">
+          <div className="rounded-[18px] border border-ink-100 bg-white p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/60 text-sm">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-section-teal-bg)] text-sm">
                   🎓
                 </span>
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--color-section-teal-fg)]">
@@ -375,7 +375,7 @@ export default function VisitPage({
               {canEditTraining && (
                 <button
                   onClick={openTrainingEditor}
-                  className="rounded-full bg-white/60 px-2.5 py-0.5 text-[11px] font-bold text-[var(--color-section-teal-fg)]"
+                  className="rounded-full bg-[var(--color-section-teal-bg)] px-2.5 py-0.5 text-[11px] font-bold text-[var(--color-section-teal-fg)]"
                 >
                   Edit details
                 </button>
@@ -383,7 +383,7 @@ export default function VisitPage({
             </div>
             <ul className="space-y-2">
               {trainedStaff.map((s) => (
-                <li key={s.staff_id} className="rounded-xl bg-white/50 px-3 py-2">
+                <li key={s.staff_id} className="rounded-xl border border-ink-100 px-3 py-2">
                   <p className="text-[13px] font-bold text-ink-700">{s.name}</p>
                   {s.products ? (
                     <p className="mt-0.5 whitespace-pre-wrap text-[12px] leading-relaxed text-ink-500">{s.products}</p>
