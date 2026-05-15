@@ -12,12 +12,13 @@ export async function GET(
     return Response.json({ error: "Not authorised" }, { status: 401 });
   }
   const { id } = await params;
-  const visit = await getFullVisitForCM(cm.telegram_id, id);
+  const visit = await getFullVisitForCM(cm.telegram_id, id, cm.role);
   if (!visit) {
     return Response.json({ error: "Visit not found" }, { status: 404 });
   }
   const photoUrls = await signPhotoUrls(visit.photo_paths);
-  return Response.json({ visit, photoUrls });
+  const canEditCoCMs = visit.viewer_is_lead || cm.role !== "cm";
+  return Response.json({ visit, photoUrls, canEditCoCMs });
 }
 
 export async function PATCH(
@@ -28,7 +29,7 @@ export async function PATCH(
   if (!cm) return Response.json({ error: "Not authorised" }, { status: 401 });
 
   const { id } = await params;
-  const visit = await getFullVisitForCM(cm.telegram_id, id);
+  const visit = await getFullVisitForCM(cm.telegram_id, id, cm.role);
   if (!visit) return Response.json({ error: "Visit not found" }, { status: 404 });
 
   const body = await req.json().catch(() => null);

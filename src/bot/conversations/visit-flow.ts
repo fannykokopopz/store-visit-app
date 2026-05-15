@@ -4,12 +4,31 @@ import { BotContext } from '../middleware/auth.js';
 import { getStoresForCM } from '../../db/queries/stores.js';
 import { searchStoresByName, getStoreById } from '../../db/queries/stores.js';
 import { createVisit, lockVisit, attachVisitSections, getLastVisitDatePerStore } from '../../db/queries/visits.js';
+import { setVisitCMs } from '../../db/queries/visit-cms.js';
+import { getAllCMs, type CM } from '../../db/queries/cms.js';
 import { getActivePlan, consumePlan } from '../../db/queries/visit-plans.js';
 import { buildStorePicker, buildSearchResultsPicker, buildStoreContextMessage } from '../keyboards/store-picker.js';
 import { buildTemplateMessage } from '../../utils/template.js';
 import { parseTemplate, filledCount } from '../../utils/parse-template.js';
 import { startPhotoCollection } from '../photo-collection.js';
 import { sendVisitDetails } from '../visit-details.js';
+
+function buildCoCMPicker(cms: CM[], selected: Set<number>): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  for (let i = 0; i < cms.length; i += 2) {
+    const a = cms[i];
+    const labelA = `${selected.has(a.telegram_id) ? '✓ ' : ''}${a.nickname ?? a.full_name}`;
+    kb.text(labelA, `coCM:${a.telegram_id}`);
+    if (i + 1 < cms.length) {
+      const b = cms[i + 1];
+      const labelB = `${selected.has(b.telegram_id) ? '✓ ' : ''}${b.nickname ?? b.full_name}`;
+      kb.text(labelB, `coCM:${b.telegram_id}`);
+    }
+    kb.row();
+  }
+  kb.text('✅ Done', 'coCM:done').text('Solo visit', 'coCM:solo');
+  return kb;
+}
 
 type VisitConversation = Conversation<BotContext, BotContext>;
 
@@ -152,6 +171,54 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   // ── Consume active plan if any (silent) ───────────────────────────────────
 
   const plan = await conversation.external(() => getActivePlan(telegramId, storeId));
+
+  // ── Step 1b: Co-CM picker ─────────────────────────────────────────────────
+  // Skip silently if no other CMs in the same market.
+
+  const market = ctx.user?.market ?? 'SG';
+  const marketCMs = await conversation.external(() => getAllCMs(market));
+  const pickableCMs = marketCMs.filter((c) => c.telegram_id !== telegramId);
+
+  const coCMIds = new Set<number>();
+
+  if (pickableCMs.length > 0) {
+    const pickerMsg = await ctx.reply(
+      "Anyone visiting with you? Tap names to tag co-CMs, then ✅ Done. Or pick Solo visit.",
+      { reply_markup: buildCoCMPicker(pickableCMs, coCMIds) },
+    );
+
+    coCMLoop: while (true) {
+      const upd = await conversation.wait();
+
+      if (upd.message?.text === '/cancel') {
+        await ctx.reply("No worries — come back whenever you're ready 👋");
+        return;
+      }
+      if (!upd.callbackQuery) continue;
+
+      const data = upd.callbackQuery.data ?? '';
+
+      if (data === 'coCM:done' || data === 'coCM:solo') {
+        if (data === 'coCM:solo') coCMIds.clear();
+        await upd.answerCallbackQuery(data === 'coCM:solo' ? 'Solo' : `Tagged ${coCMIds.size}`);
+        break coCMLoop;
+      }
+
+      const m = data.match(/^coCM:(\d+)$/);
+      if (m) {
+        const id = Number(m[1]);
+        if (coCMIds.has(id)) coCMIds.delete(id);
+        else coCMIds.add(id);
+        await upd.answerCallbackQuery();
+        await ctx.api.editMessageReplyMarkup(pickerMsg.chat.id, pickerMsg.message_id, {
+          reply_markup: buildCoCMPicker(pickableCMs, coCMIds),
+        });
+        continue;
+      }
+
+      await upd.answerCallbackQuery().catch(() => {});
+    }
+  }
 
   // ── Step 2: Template ───────────────────────────────────────────────────────
 
@@ -332,6 +399,9 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   }
 
   await conversation.external(() => attachVisitSections(visit.id, sections));
+  await conversation.external(() =>
+    setVisitCMs(visit.id, telegramId, Array.from(coCMIds)),
+  );
   await conversation.external(() => lockVisit(visit.id));
   if (plan) await conversation.external(() => consumePlan(plan.id));
 

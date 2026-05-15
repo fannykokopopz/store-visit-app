@@ -63,6 +63,8 @@ export interface FullVisit extends VisitSummary {
   photo_paths: string[];
   grade: 1 | 2 | 3 | null;
   grade_comments: string | null;
+  cms: { telegram_id: number; name: string; role: 'lead' | 'co' }[];
+  viewer_is_lead: boolean;
 }
 
 export async function getPortfolioForCM(
@@ -91,8 +93,8 @@ export async function getPortfolioForCM(
 
   const { data: visitRows } = await supabase
     .from("visits")
-    .select("id, store_id, visit_date, created_at")
-    .eq("cm_telegram_id", telegramId)
+    .select("id, store_id, visit_date, created_at, visit_cms!inner(cm_telegram_id)")
+    .eq("visit_cms.cm_telegram_id", telegramId)
     .eq("is_locked", true)
     .in("store_id", storeIds)
     .order("visit_date", { ascending: false })
@@ -150,8 +152,8 @@ export async function getStoreTimelineForCM(
           .order("created_at", { ascending: false })
       : supabase
           .from("visits")
-          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, grade, grade_comments")
-          .eq("cm_telegram_id", telegramId)
+          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, grade, grade_comments, visit_cms!inner(cm_telegram_id)")
+          .eq("visit_cms.cm_telegram_id", telegramId)
           .eq("store_id", storeId)
           .eq("is_locked", true)
           .order("visit_date", { ascending: false })
@@ -305,13 +307,16 @@ export async function searchVisitsInMarket(
   const query = (options.q ?? "").trim();
   const useTextSearch = query.length >= 2;
 
+  const baseSelect = "id, visit_date, store_id, good_news, competitors, display_stock, follow_up, buzz_plan, training, cms(full_name, nickname)";
+  const filterByCM = options.cmTelegramId !== undefined;
+
   let q = supabase
     .from("visits")
-    .select("id, visit_date, store_id, good_news, competitors, display_stock, follow_up, buzz_plan, training, cms(full_name, nickname)")
+    .select(filterByCM ? `${baseSelect}, visit_cms!inner(cm_telegram_id)` : baseSelect)
     .in("store_id", storeIds)
     .eq("is_locked", true);
 
-  if (options.cmTelegramId !== undefined) q = q.eq("cm_telegram_id", options.cmTelegramId);
+  if (filterByCM) q = q.eq("visit_cms.cm_telegram_id", options.cmTelegramId!);
   if (options.fromDate) q = q.gte("visit_date", options.fromDate);
   if (options.toDate) q = q.lte("visit_date", options.toDate);
   for (const s of validSections) q = q.not(s, "is", null);
@@ -409,6 +414,7 @@ export async function updateCMNickname(telegramId: number, nickname: string): Pr
 export async function getFullVisitForCM(
   telegramId: number,
   visitId: string,
+  viewerRole: "cm" | "cmic" | "am" | "admin" = "cm",
 ): Promise<FullVisit | null> {
   const { data, error } = await supabase
     .from("visits")
@@ -420,7 +426,24 @@ export async function getFullVisitForCM(
   if (error || !data) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const v = data as any;
-  if (v.cm_telegram_id !== telegramId) return null;
+
+  const { data: vcRows } = await supabase
+    .from("visit_cms")
+    .select("cm_telegram_id, role, cms(full_name, nickname)")
+    .eq("visit_id", visitId);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cms = ((vcRows ?? []) as any[])
+    .map((r) => ({
+      telegram_id: r.cm_telegram_id as number,
+      role: r.role as 'lead' | 'co',
+      name: (r.cms?.nickname as string | null) ?? (r.cms?.full_name as string | null) ?? "Unknown",
+    }))
+    .sort((a, b) => (a.role === 'lead' ? -1 : b.role === 'lead' ? 1 : 0));
+
+  const isInVisit = cms.some((c) => c.telegram_id === telegramId);
+  const isElevated = viewerRole !== "cm";
+  if (!isInVisit && !isElevated) return null;
 
   const { data: photos } = await supabase
     .from("visit_photos")
@@ -432,6 +455,8 @@ export async function getFullVisitForCM(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((p: any) => p.storage_path as string)
     .filter(Boolean);
+
+  const viewerIsLead = cms.find((c) => c.role === 'lead')?.telegram_id === telegramId;
 
   return {
     id: v.id,
@@ -453,6 +478,8 @@ export async function getFullVisitForCM(
     photo_paths: photoPaths,
     grade: v.grade ?? null,
     grade_comments: v.grade_comments ?? null,
+    cms,
+    viewer_is_lead: viewerIsLead,
   };
 }
 
@@ -479,6 +506,37 @@ export async function insertVisitPhoto(
     storage_path: storagePath,
     ...(fileSize !== undefined && { file_size: fileSize }),
   });
+  return !error;
+}
+
+export async function updateVisitCoCMs(
+  visitId: string,
+  coTelegramIds: number[],
+): Promise<boolean> {
+  const { data: leadRow } = await supabase
+    .from("visit_cms")
+    .select("cm_telegram_id")
+    .eq("visit_id", visitId)
+    .eq("role", "lead")
+    .maybeSingle();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const leadId = (leadRow as any)?.cm_telegram_id as number | undefined;
+
+  await supabase
+    .from("visit_cms")
+    .delete()
+    .eq("visit_id", visitId)
+    .eq("role", "co");
+
+  const filtered = Array.from(new Set(coTelegramIds)).filter((id) => id !== leadId);
+  if (filtered.length === 0) return true;
+
+  const { error } = await supabase
+    .from("visit_cms")
+    .insert(
+      filtered.map((id) => ({ visit_id: visitId, cm_telegram_id: id, role: "co" as const })),
+    );
   return !error;
 }
 

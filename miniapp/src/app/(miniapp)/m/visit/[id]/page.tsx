@@ -6,6 +6,12 @@ import Image from "next/image";
 import { initTelegram } from "../../telegram-init";
 import { useSwipeBack } from "@/lib/useSwipeBack";
 
+interface VisitCM {
+  telegram_id: number;
+  role: 'lead' | 'co';
+  name: string;
+}
+
 interface FullVisit {
   id: string;
   store_id: string;
@@ -22,6 +28,8 @@ interface FullVisit {
   edited_at: string | null;
   grade: 1 | 2 | 3 | null;
   grade_comments: string | null;
+  cms: VisitCM[];
+  viewer_is_lead: boolean;
 }
 
 const GRADE_STYLES: Record<1 | 2 | 3, { label: string; pill: string }> = {
@@ -33,7 +41,10 @@ const GRADE_STYLES: Record<1 | 2 | 3, { label: string; pill: string }> = {
 interface VisitPayload {
   visit: FullVisit;
   photoUrls: string[];
+  canEditCoCMs: boolean;
 }
+
+interface MarketCM { telegram_id: number; name: string }
 
 type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan" | "training";
 
@@ -105,14 +116,20 @@ export default function VisitPage({
   const [data, setData] = useState<VisitPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [initData, setInitData] = useState<string | null>(null);
+  const [editingCMs, setEditingCMs] = useState(false);
+  const [marketCMs, setMarketCMs] = useState<MarketCM[] | null>(null);
+  const [pendingCoIds, setPendingCoIds] = useState<Set<number>>(new Set());
+  const [savingCMs, setSavingCMs] = useState(false);
   useSwipeBack();
 
   useEffect(() => {
     (async () => {
-      const initData = await initTelegram();
-      if (!initData) { setError("Open this from inside Telegram."); return; }
+      const td = await initTelegram();
+      if (!td) { setError("Open this from inside Telegram."); return; }
+      setInitData(td);
       const res = await fetch(`/api/m/visit/${id}`, {
-        headers: { Authorization: `tma ${initData}` },
+        headers: { Authorization: `tma ${td}` },
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -122,6 +139,46 @@ export default function VisitPage({
       setData(await res.json());
     })().catch((e) => setError(String(e)));
   }, [id]);
+
+  function openCMEditor() {
+    if (!data || !initData) return;
+    setPendingCoIds(new Set(data.visit.cms.filter((c) => c.role === 'co').map((c) => c.telegram_id)));
+    setEditingCMs(true);
+    if (marketCMs === null) {
+      fetch(`/api/m/filter-options`, { headers: { Authorization: `tma ${initData}` } })
+        .then((r) => r.json())
+        .then((j) => setMarketCMs(j.cms ?? []))
+        .catch(() => setMarketCMs([]));
+    }
+  }
+
+  function toggleCoCM(tgId: number) {
+    setPendingCoIds((curr) => {
+      const next = new Set(curr);
+      if (next.has(tgId)) next.delete(tgId); else next.add(tgId);
+      return next;
+    });
+  }
+
+  async function saveCoCMs() {
+    if (!initData) return;
+    setSavingCMs(true);
+    try {
+      const res = await fetch(`/api/m/visit/${id}/co-cms`, {
+        method: "PATCH",
+        headers: { Authorization: `tma ${initData}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ co_cm_telegram_ids: Array.from(pendingCoIds) }),
+      });
+      if (res.ok) {
+        // Refetch visit to get updated CMs
+        const fresh = await fetch(`/api/m/visit/${id}`, { headers: { Authorization: `tma ${initData}` } });
+        if (fresh.ok) setData(await fresh.json());
+        setEditingCMs(false);
+      }
+    } finally {
+      setSavingCMs(false);
+    }
+  }
 
   if (error) {
     return (
@@ -138,8 +195,10 @@ export default function VisitPage({
     );
   }
 
-  const { visit, photoUrls } = data;
+  const { visit, photoUrls, canEditCoCMs } = data;
   const filled = SECTIONS.filter((s) => visit[s.key]);
+  const lead = visit.cms.find((c) => c.role === 'lead');
+  const cos = visit.cms.filter((c) => c.role === 'co');
 
   return (
     <main className="min-h-screen pb-12">
@@ -175,6 +234,27 @@ export default function VisitPage({
                 )}
               </div>
             )}
+            {/* CM list */}
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {lead && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-tc-50)] text-[var(--color-tc-600)] border border-[var(--color-tc-100)] px-2 py-0.5 text-[11px] font-bold">
+                  <span className="text-[9px] uppercase tracking-wider opacity-70">Lead</span> {lead.name}
+                </span>
+              )}
+              {cos.map((c) => (
+                <span key={c.telegram_id} className="inline-flex items-center rounded-full bg-ink-100 text-ink-500 px-2 py-0.5 text-[11px] font-semibold">
+                  {c.name}
+                </span>
+              ))}
+              {canEditCoCMs && (
+                <button
+                  onClick={openCMEditor}
+                  className="rounded-full border border-dashed border-ink-200 px-2 py-0.5 text-[11px] font-semibold text-ink-400"
+                >
+                  + Edit co-CMs
+                </button>
+              )}
+            </div>
           </div>
           <Link
             href={`/m/visit/${visit.id}/edit`}
@@ -235,6 +315,64 @@ export default function VisitPage({
           ))
         )}
       </div>
+
+      {/* Edit co-CMs sheet */}
+      {editingCMs && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setEditingCMs(false)} />
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-xl max-h-[80vh] flex flex-col">
+            <div className="w-8 h-1 bg-ink-200 rounded-full mx-auto mb-4" />
+            <h2 className="text-base font-extrabold text-ink-700 mb-1">Edit co-CMs</h2>
+            <p className="text-[11px] text-ink-300 mb-3">Tap to toggle. The lead CM ({lead?.name}) cannot be removed here.</p>
+
+            <div className="flex-1 overflow-y-auto -mx-2 px-2">
+              {marketCMs === null ? (
+                <p className="text-center text-sm text-ink-300 py-6">Loading…</p>
+              ) : marketCMs.length === 0 ? (
+                <p className="text-center text-sm text-ink-300 py-6">No other CMs in your market.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {marketCMs
+                    .filter((c) => c.telegram_id !== lead?.telegram_id)
+                    .map((c) => {
+                      const on = pendingCoIds.has(c.telegram_id);
+                      return (
+                        <li key={c.telegram_id}>
+                          <button
+                            onClick={() => toggleCoCM(c.telegram_id)}
+                            className={`w-full flex items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${
+                              on ? "bg-[var(--color-tc-50)] text-[var(--color-tc-600)] border border-[var(--color-tc-200)]" : "bg-ink-50 text-ink-700 border border-transparent"
+                            }`}
+                          >
+                            <span>{c.name}</span>
+                            <span className="text-base">{on ? "✓" : ""}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                </ul>
+              )}
+            </div>
+
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setEditingCMs(false)}
+                className="flex-1 rounded-xl py-3 text-sm font-bold bg-ink-100 text-ink-500"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveCoCMs}
+                disabled={savingCMs}
+                className="flex-1 rounded-xl py-3 text-sm font-bold text-white disabled:opacity-50"
+                style={{ background: "var(--color-tc-600)" }}
+              >
+                {savingCMs ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Lightbox */}
       {lightboxIndex !== null && (

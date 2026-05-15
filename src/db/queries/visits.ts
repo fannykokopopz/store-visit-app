@@ -103,8 +103,8 @@ export async function getRecentVisitsByCM(
 ): Promise<(Visit & { stores: { name: string } })[]> {
   const { data, error } = await supabase
     .from('visits')
-    .select('*, stores(name)')
-    .eq('cm_telegram_id', telegramId)
+    .select('*, stores(name), visit_cms!inner(cm_telegram_id)')
+    .eq('visit_cms.cm_telegram_id', telegramId)
     .eq('is_locked', true)
     .order('visit_date', { ascending: false })
     .order('created_at', { ascending: false })
@@ -121,8 +121,8 @@ export async function getVisitsByCMAndStore(
 ): Promise<Visit[]> {
   const { data, error } = await supabase
     .from('visits')
-    .select('*')
-    .eq('cm_telegram_id', telegramId)
+    .select('*, visit_cms!inner(cm_telegram_id)')
+    .eq('visit_cms.cm_telegram_id', telegramId)
     .eq('store_id', storeId)
     .eq('is_locked', true)
     .order('visit_date', { ascending: false })
@@ -138,8 +138,8 @@ export async function getLastVisitDatePerStore(
 ): Promise<Record<string, string>> {
   const { data, error } = await supabase
     .from('visits')
-    .select('store_id, visit_date, created_at')
-    .eq('cm_telegram_id', telegramId)
+    .select('store_id, visit_date, created_at, visit_cms!inner(cm_telegram_id)')
+    .eq('visit_cms.cm_telegram_id', telegramId)
     .eq('is_locked', true)
     .order('visit_date', { ascending: false })
     .order('created_at', { ascending: false });
@@ -164,8 +164,8 @@ export async function getStoreContextForCM(
   const [lastRes, countRes] = await Promise.all([
     supabase
       .from('visits')
-      .select('id, visit_date')
-      .eq('cm_telegram_id', telegramId)
+      .select('id, visit_date, visit_cms!inner(cm_telegram_id)')
+      .eq('visit_cms.cm_telegram_id', telegramId)
       .eq('store_id', storeId)
       .eq('is_locked', true)
       .order('visit_date', { ascending: false })
@@ -174,8 +174,8 @@ export async function getStoreContextForCM(
       .maybeSingle(),
     supabase
       .from('visits')
-      .select('id', { count: 'exact', head: true })
-      .eq('cm_telegram_id', telegramId)
+      .select('id, visit_cms!inner(cm_telegram_id)', { count: 'exact', head: true })
+      .eq('visit_cms.cm_telegram_id', telegramId)
       .eq('store_id', storeId)
       .eq('is_locked', true)
       .gte('visit_date', since),
