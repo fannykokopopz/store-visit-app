@@ -42,6 +42,14 @@ interface SearchResult {
   training: string | null;
 }
 
+type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan" | "training";
+
+interface FilterOptions {
+  stores: { id: string; name: string; chain: string }[];
+  cms: { telegram_id: number; name: string }[];
+  canFilterCM: boolean;
+}
+
 interface Portfolio {
   cm: { name: string; market: string; nickname: string | null };
   stores: PortfolioStore[];
@@ -139,7 +147,13 @@ function PortfolioContent() {
   // Search state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchSection, setSearchSection] = useState("");
+  const [sectionFilters, setSectionFilters] = useState<SectionKey[]>([]);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [storeFilter, setStoreFilter] = useState("");
+  const [cmFilter, setCmFilter] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
   const [searching, setSearching] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -189,14 +203,29 @@ function PortfolioContent() {
       .catch(() => setAllStores([]));
   }, [tab, allStores, initData]);
 
+  const hasAnyFilter =
+    sectionFilters.length > 0 || !!fromDate || !!toDate || !!storeFilter || !!cmFilter;
+  const filterCount =
+    sectionFilters.length + (fromDate ? 1 : 0) + (toDate ? 1 : 0) + (storeFilter ? 1 : 0) + (cmFilter ? 1 : 0);
+
   // Debounced search
   const doSearch = useCallback(
-    async (q: string, section: string) => {
-      if (!initData || q.trim().length < 2) { setSearchResults(null); return; }
+    async (q: string, sections: SectionKey[], from: string, to: string, store: string, cm: string) => {
+      if (!initData) { setSearchResults(null); return; }
+      const trimmed = q.trim();
+      const hasQuery = trimmed.length >= 2;
+      const hasFilter = sections.length > 0 || !!from || !!to || !!store || !!cm;
+      if (!hasQuery && !hasFilter) { setSearchResults(null); return; }
       setSearching(true);
       try {
-        const url = `/api/m/search?q=${encodeURIComponent(q)}${section ? `&section=${section}` : ""}`;
-        const res = await fetch(url, { headers: { Authorization: `tma ${initData}` } });
+        const params = new URLSearchParams();
+        if (hasQuery) params.set("q", trimmed);
+        for (const s of sections) params.append("section", s);
+        if (from) params.set("from", from);
+        if (to) params.set("to", to);
+        if (store) params.set("store_id", store);
+        if (cm) params.set("cm_telegram_id", cm);
+        const res = await fetch(`/api/m/search?${params.toString()}`, { headers: { Authorization: `tma ${initData}` } });
         const j = await res.json();
         setSearchResults(j.results ?? []);
       } finally {
@@ -208,17 +237,48 @@ function PortfolioContent() {
 
   useEffect(() => {
     if (!searchOpen) return;
-    const t = setTimeout(() => doSearch(searchQuery, searchSection), 350);
+    const t = setTimeout(
+      () => doSearch(searchQuery, sectionFilters, fromDate, toDate, storeFilter, cmFilter),
+      350,
+    );
     return () => clearTimeout(t);
-  }, [searchQuery, searchSection, searchOpen, doSearch]);
+  }, [searchQuery, sectionFilters, fromDate, toDate, storeFilter, cmFilter, searchOpen, doSearch]);
+
+  // Fetch filter options once when search opens
+  useEffect(() => {
+    if (!searchOpen || !initData || filterOptions !== null) return;
+    fetch("/api/m/filter-options", { headers: { Authorization: `tma ${initData}` } })
+      .then((r) => r.json())
+      .then((j) => setFilterOptions({ stores: j.stores ?? [], cms: j.cms ?? [], canFilterCM: !!j.canFilterCM }))
+      .catch(() => setFilterOptions({ stores: [], cms: [], canFilterCM: false }));
+  }, [searchOpen, initData, filterOptions]);
 
   // Focus search input when opened
   useEffect(() => {
     if (searchOpen) setTimeout(() => searchRef.current?.focus(), 50);
   }, [searchOpen]);
 
-  function openSearch() { setSearchOpen(true); setSearchQuery(""); setSearchSection(""); setSearchResults(null); }
-  function closeSearch() { setSearchOpen(false); setSearchQuery(""); setSearchResults(null); }
+  function openSearch() {
+    setSearchOpen(true);
+    setSearchQuery("");
+    setSectionFilters([]);
+    setFromDate(""); setToDate("");
+    setStoreFilter(""); setCmFilter("");
+    setSearchResults(null);
+  }
+  function closeSearch() {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setSearchResults(null);
+  }
+  function clearAllFilters() {
+    setSectionFilters([]);
+    setFromDate(""); setToDate("");
+    setStoreFilter(""); setCmFilter("");
+  }
+  function toggleSection(key: SectionKey) {
+    setSectionFilters((curr) => curr.includes(key) ? curr.filter((s) => s !== key) : [...curr, key]);
+  }
 
   async function saveNickname() {
     if (!initData || !nickInput.trim()) return;
@@ -404,22 +464,90 @@ function PortfolioContent() {
               </button>
             </div>
 
-            {/* Section filter chips */}
+            {/* Has-section filter chips (multi-select) */}
             <div className="flex gap-1.5 mt-2.5 overflow-x-auto pb-0.5 no-scrollbar">
-              {[{ value: "", label: "All" }, ...Object.entries(SECTION_LABELS).map(([v, l]) => ({ value: v, label: l }))].map(({ value, label }) => (
-                <button
-                  key={value}
-                  onClick={() => setSearchSection(value)}
-                  className={`shrink-0 text-[11px] font-semibold rounded-full px-3 py-1 transition-colors ${
-                    searchSection === value
-                      ? "bg-[var(--color-tc-600)] text-white"
-                      : "bg-ink-100 text-ink-400"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+              {(Object.entries(SECTION_LABELS) as [SectionKey, string][]).map(([v, l]) => {
+                const active = sectionFilters.includes(v);
+                return (
+                  <button
+                    key={v}
+                    onClick={() => toggleSection(v)}
+                    className={`shrink-0 text-[11px] font-semibold rounded-full px-3 py-1 transition-colors ${
+                      active ? "bg-[var(--color-tc-600)] text-white" : "bg-ink-100 text-ink-400"
+                    }`}
+                  >
+                    {l}
+                  </button>
+                );
+              })}
             </div>
+
+            {/* More filters toggle + clear */}
+            <div className="flex items-center justify-between mt-2">
+              <button
+                onClick={() => setFiltersOpen((v) => !v)}
+                className="text-[11px] font-semibold text-[var(--color-tc-600)]"
+              >
+                {filtersOpen ? "▾ Hide filters" : `▸ More filters${filterCount > 0 ? ` (${filterCount})` : ""}`}
+              </button>
+              {hasAnyFilter && (
+                <button
+                  onClick={clearAllFilters}
+                  className="text-[11px] font-semibold text-ink-300"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            {filtersOpen && (
+              <div className="mt-2 space-y-2">
+                {/* Date range */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="flex-1 text-[12px] bg-ink-100 rounded-lg px-2.5 py-1.5 outline-none text-ink-700"
+                    placeholder="From"
+                  />
+                  <span className="text-ink-300 text-[11px]">to</span>
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="flex-1 text-[12px] bg-ink-100 rounded-lg px-2.5 py-1.5 outline-none text-ink-700"
+                    placeholder="To"
+                  />
+                </div>
+
+                {/* Store */}
+                <select
+                  value={storeFilter}
+                  onChange={(e) => setStoreFilter(e.target.value)}
+                  className="w-full text-[12px] bg-ink-100 rounded-lg px-2.5 py-1.5 outline-none text-ink-700"
+                >
+                  <option value="">All stores</option>
+                  {(filterOptions?.stores ?? []).map((s) => (
+                    <option key={s.id} value={s.id}>{s.name} · {s.chain}</option>
+                  ))}
+                </select>
+
+                {/* CM (only if viewer is admin/am/cmic) */}
+                {filterOptions?.canFilterCM && (
+                  <select
+                    value={cmFilter}
+                    onChange={(e) => setCmFilter(e.target.value)}
+                    className="w-full text-[12px] bg-ink-100 rounded-lg px-2.5 py-1.5 outline-none text-ink-700"
+                  >
+                    <option value="">All CMs</option>
+                    {filterOptions.cms.map((c) => (
+                      <option key={c.telegram_id} value={String(c.telegram_id)}>{c.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Results */}
@@ -427,8 +555,10 @@ function PortfolioContent() {
             {searching && (
               <p className="text-center text-sm text-ink-300 py-8">Searching…</p>
             )}
-            {!searching && searchQuery.length >= 2 && searchResults !== null && searchResults.length === 0 && (
-              <p className="text-center text-sm text-ink-300 py-8">No results for &ldquo;{searchQuery}&rdquo;</p>
+            {!searching && searchResults !== null && searchResults.length === 0 && (
+              <p className="text-center text-sm text-ink-300 py-8">
+                No matches{searchQuery ? <> for &ldquo;{searchQuery}&rdquo;</> : ""}
+              </p>
             )}
             {!searching && searchResults && searchResults.length > 0 && (
               <ul className="space-y-2 p-3.5">
@@ -437,8 +567,10 @@ function PortfolioContent() {
                 ))}
               </ul>
             )}
-            {!searching && searchQuery.length < 2 && (
-              <p className="text-center text-sm text-ink-300 py-8">Type at least 2 characters to search</p>
+            {!searching && searchResults === null && (
+              <p className="text-center text-sm text-ink-300 py-8">
+                Type at least 2 characters or pick a filter
+              </p>
             )}
           </div>
         </div>

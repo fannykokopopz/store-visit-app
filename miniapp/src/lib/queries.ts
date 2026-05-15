@@ -258,10 +258,31 @@ export async function getAllStoresInMarket(market: string): Promise<AllMarketSto
   });
 }
 
+export type VisitSectionKey =
+  | "good_news"
+  | "competitors"
+  | "display_stock"
+  | "follow_up"
+  | "buzz_plan"
+  | "training";
+
+export interface VisitFilterOptions {
+  q?: string;                          // text search (>=2 chars to apply)
+  sections?: VisitSectionKey[];        // require non-null on each (AND)
+  fromDate?: string;                   // YYYY-MM-DD inclusive
+  toDate?: string;                     // YYYY-MM-DD inclusive
+  storeId?: string;                    // uuid
+  cmTelegramId?: number;               // bigint
+  limit?: number;
+}
+
+const ALL_SECTIONS: VisitSectionKey[] = [
+  "good_news", "competitors", "display_stock", "follow_up", "buzz_plan", "training",
+];
+
 export async function searchVisitsInMarket(
   market: string,
-  query: string,
-  section?: string,
+  options: VisitFilterOptions = {},
 ): Promise<SearchResult[]> {
   const { data: storeRows } = await supabase
     .from("stores")
@@ -273,23 +294,40 @@ export async function searchVisitsInMarket(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const storeMap = new Map(storeRows.map((s: any) => [s.id, s]));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const storeIds = storeRows.map((s: any) => s.id);
+  const allStoreIds = storeRows.map((s: any) => s.id) as string[];
 
-  const sections = ["good_news", "competitors", "display_stock", "follow_up", "buzz_plan", "training"];
-  const validSection = section && sections.includes(section) ? section : null;
+  // Narrow store set if explicit store filter is given AND it belongs to this market
+  const storeIds = options.storeId && allStoreIds.includes(options.storeId)
+    ? [options.storeId]
+    : allStoreIds;
 
-  const baseQuery = supabase
+  const validSections = (options.sections ?? []).filter((s) => ALL_SECTIONS.includes(s));
+  const query = (options.q ?? "").trim();
+  const useTextSearch = query.length >= 2;
+
+  let q = supabase
     .from("visits")
     .select("id, visit_date, store_id, good_news, competitors, display_stock, follow_up, buzz_plan, training, cms(full_name, nickname)")
     .in("store_id", storeIds)
-    .eq("is_locked", true)
+    .eq("is_locked", true);
+
+  if (options.cmTelegramId !== undefined) q = q.eq("cm_telegram_id", options.cmTelegramId);
+  if (options.fromDate) q = q.gte("visit_date", options.fromDate);
+  if (options.toDate) q = q.lte("visit_date", options.toDate);
+  for (const s of validSections) q = q.not(s, "is", null);
+
+  if (useTextSearch) {
+    // If section filters narrow text search to those columns; else search across all
+    const cols = validSections.length > 0 ? validSections : ALL_SECTIONS;
+    q = q.or(cols.map((c) => `${c}.ilike.%${query}%`).join(","));
+  }
+
+  q = q
     .order("visit_date", { ascending: false })
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(options.limit ?? 50);
 
-  const { data: visitRows } = await (validSection
-    ? baseQuery.ilike(validSection, `%${query}%`)
-    : baseQuery.or(sections.map((s) => `${s}.ilike.%${query}%`).join(",")));
+  const { data: visitRows } = await q;
 
   return (visitRows ?? []).map((v: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
     const store = storeMap.get(v.store_id) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -309,6 +347,55 @@ export async function searchVisitsInMarket(
       training: v.training ?? null,
     };
   });
+}
+
+export interface FilterOptionsPayload {
+  stores: { id: string; name: string; chain: string }[];
+  cms: { telegram_id: number; name: string }[];
+  canFilterCM: boolean;
+}
+
+export async function getFilterOptionsForMarket(
+  market: string,
+  viewerRole: "cm" | "cmic" | "am" | "admin",
+  viewerTelegramId: number,
+): Promise<FilterOptionsPayload> {
+  const canFilterCM = viewerRole !== "cm";
+
+  const storesPromise = supabase
+    .from("stores")
+    .select("id, name, chain")
+    .eq("market", market)
+    .eq("is_active", true)
+    .order("name");
+
+  const cmsPromise = canFilterCM
+    ? supabase
+        .from("cms")
+        .select("telegram_id, full_name, nickname")
+        .eq("market", market)
+        .eq("is_active", true)
+        .order("full_name")
+    : Promise.resolve({ data: [], error: null });
+
+  const [storesRes, cmsRes] = await Promise.all([storesPromise, cmsPromise]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const stores = ((storesRes.data ?? []) as any[]).map((s) => ({
+    id: s.id as string,
+    name: s.name as string,
+    chain: s.chain as string,
+  }));
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cms = ((cmsRes.data ?? []) as any[])
+    .filter((c) => c.telegram_id !== viewerTelegramId || canFilterCM)
+    .map((c) => ({
+      telegram_id: c.telegram_id as number,
+      name: (c.nickname as string | null) ?? (c.full_name as string),
+    }));
+
+  return { stores, cms, canFilterCM };
 }
 
 export async function updateCMNickname(telegramId: number, nickname: string): Promise<boolean> {
