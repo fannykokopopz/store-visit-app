@@ -107,8 +107,27 @@ function fmtDate(dateStr: string): string {
   });
 }
 
-// Placeholder brand list — Wilson will supply the full catalogue later.
-const PRODUCT_SUGGESTIONS = ["Marshall", "Bowers & Wilkins", "Sonos"];
+// Starter product list — Wilson will supply the full catalogue later.
+const PRODUCT_SUGGESTIONS = [
+  "Marshall Acton III",
+  "Marshall Stanmore III",
+  "Marshall Woburn III",
+  "Marshall Emberton II",
+  "Marshall Major V",
+  "Marshall Motif II",
+  "Marshall Willen",
+  "B&W Px7 S2e",
+  "B&W Px8",
+  "B&W Zeppelin",
+  "B&W Pi8",
+  "Sonos Era 100",
+  "Sonos Era 300",
+  "Sonos Arc Ultra",
+  "Sonos Beam",
+  "Sonos Move 2",
+  "Sonos Roam 2",
+  "Sonos Ace",
+];
 
 export default function VisitPage({
   params,

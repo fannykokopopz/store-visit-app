@@ -19,10 +19,8 @@ interface VisitRow {
   display_stock: string | null;
   follow_up: string | null;
   buzz_plan: string | null;
-  training: string | null;
   photo_count: number;
   photo_urls: string[];
-  sections_filled: number;
   edited_at: string | null;
 }
 
@@ -45,13 +43,14 @@ const TIER_STYLE: Record<string, { bg: string; color: string }> = {
 };
 
 const SECTIONS = [
-  { key: "good_news",     label: "Good News",             icon: "🌟", bg: "var(--color-section-amber-bg)",  border: "var(--color-section-amber-border)",  color: "var(--color-tc-600)" },
-  { key: "competitors",   label: "Competitors' Insights", icon: "🔍", bg: "var(--color-section-blue-bg)",   border: "var(--color-section-blue-border)",   color: "var(--color-tier-t1-fg)" },
-  { key: "display_stock", label: "Display & Stock",       icon: "📦", bg: "var(--color-section-green-bg)",  border: "var(--color-section-green-border)",  color: "var(--color-tier-t2-fg)" },
-  { key: "follow_up",     label: "What to Follow Up",     icon: "✅", bg: "var(--color-section-pink-bg)",   border: "var(--color-section-pink-border)",   color: "#C0185A" },
-  { key: "buzz_plan",     label: "Buzz Plan",             icon: "⚡", bg: "var(--color-section-purple-bg)", border: "var(--color-section-purple-border)", color: "#5B2DB5" },
-  { key: "training",      label: "Training",              icon: "🎓", bg: "var(--color-section-teal-bg)",   border: "var(--color-section-teal-border)",   color: "var(--color-section-teal-fg)" },
+  { key: "good_news",     label: "Good News",             icon: "🌟", iconBg: "var(--color-section-amber-bg)",  color: "var(--color-tc-600)" },
+  { key: "competitors",   label: "Competitors' Insights", icon: "🔍", iconBg: "var(--color-section-blue-bg)",   color: "var(--color-tier-t1-fg)" },
+  { key: "display_stock", label: "Display & Stock",       icon: "📦", iconBg: "var(--color-section-green-bg)",  color: "var(--color-tier-t2-fg)" },
+  { key: "follow_up",     label: "What to Follow Up",     icon: "✅", iconBg: "var(--color-section-pink-bg)",   color: "#C0185A" },
+  { key: "buzz_plan",     label: "Buzz Plan",             icon: "⚡", iconBg: "var(--color-section-purple-bg)", color: "#5B2DB5" },
 ] as const;
+
+type SectionKey = typeof SECTIONS[number]["key"];
 
 function getMonday(date: Date): Date {
   const d = new Date(date);
@@ -91,6 +90,11 @@ export default function VisitsPage() {
   const [filterCM,   setFilterCM]   = useState("");
   const [weekOffset, setWeekOffset] = useState(0);
   const [lightbox,   setLightbox]   = useState<string | null>(null);
+  const [sectionFilters, setSectionFilters] = useState<SectionKey[]>([]);
+
+  function toggleSection(key: SectionKey) {
+    setSectionFilters(curr => curr.includes(key) ? curr.filter(s => s !== key) : [...curr, key]);
+  }
 
   const thisMonday    = getMonday(new Date());
   const currentMonday = addWeeks(thisMonday, weekOffset);
@@ -139,7 +143,7 @@ export default function VisitsPage() {
         </div>
 
         {/* Controls */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
           <div className="market-chips">
             {MARKET_OPTIONS.map(({ value, label }) => (
               <button
@@ -165,19 +169,62 @@ export default function VisitsPage() {
           )}
         </div>
 
+        {/* Section "has" filter chips */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 20, alignItems: "center" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-ink-300)", textTransform: "uppercase", letterSpacing: "0.6px", marginRight: 4 }}>
+            Has
+          </span>
+          {SECTIONS.map(s => {
+            const active = sectionFilters.includes(s.key);
+            return (
+              <button
+                key={s.key}
+                onClick={() => toggleSection(s.key)}
+                className="mchip"
+                style={{
+                  background: active ? "var(--color-tc-50)" : undefined,
+                  color: active ? "var(--color-tc-600)" : undefined,
+                  borderColor: active ? "var(--color-tc-100)" : undefined,
+                }}
+              >
+                {s.icon} {s.label}
+              </button>
+            );
+          })}
+          {sectionFilters.length > 0 && (
+            <button
+              onClick={() => setSectionFilters([])}
+              style={{ fontSize: 11, fontWeight: 600, color: "var(--color-ink-300)", background: "none", border: "none", cursor: "pointer", marginLeft: 4 }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
         {/* Feed */}
         {loading ? (
           <div className="empty-state">
             <p style={{ color: "var(--color-ink-300)", fontSize: 13 }}>Loading…</p>
           </div>
-        ) : visits.length === 0 ? (
-          <div className="empty-state">
-            <p className="empty-state-icon">📋</p>
-            <p>No visits logged for this week{market !== "ALL" ? ` in ${market}` : ""}.</p>
-          </div>
-        ) : (
+        ) : (() => {
+          const filtered = sectionFilters.length === 0
+            ? visits
+            : visits.filter(v => sectionFilters.every(k => v[k]));
+          if (filtered.length === 0) {
+            return (
+              <div className="empty-state">
+                <p className="empty-state-icon">📋</p>
+                <p>
+                  {visits.length === 0
+                    ? <>No visits logged for this week{market !== "ALL" ? ` in ${market}` : ""}.</>
+                    : <>No visits match the selected section filters.</>}
+                </p>
+              </div>
+            );
+          }
+          return (
           <div>
-            {visits.map(v => {
+            {filtered.map(v => {
               const tier = v.store_tier;
               const ts   = tier ? TIER_STYLE[tier] : null;
               const filledSections = SECTIONS.filter(s => v[s.key]);
@@ -200,17 +247,6 @@ export default function VisitsPage() {
                         <span className="visit-meta-item">{v.cm_name}</span>
                         <span className="visit-meta-item">·</span>
                         <span className="visit-meta-item">{fmtDate(v.visit_date)}</span>
-                        <span className="visit-meta-item">·</span>
-                        <span className="visit-sections">
-                          {Array.from({ length: 6 }, (_, i) => (
-                            <span
-                              key={i}
-                              className="visit-section-dot"
-                              style={{ background: i < v.sections_filled ? "var(--color-tc-500)" : "var(--color-ink-100)" }}
-                            />
-                          ))}
-                          <span className="visit-meta-item" style={{ marginLeft: 4 }}>{v.sections_filled}/6</span>
-                        </span>
                         {v.photo_count > 0 && (
                           <>
                             <span className="visit-meta-item">·</span>
@@ -254,10 +290,20 @@ export default function VisitsPage() {
                           <div
                             key={s.key}
                             className="visit-section-card"
-                            style={{ background: s.bg, border: `1px solid ${s.border}` }}
+                            style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
                           >
-                            <div className="visit-section-label" style={{ color: s.color }}>
-                              <span>{s.icon}</span><span>{s.label}</span>
+                            <div className="visit-section-label" style={{ color: s.color, gap: 6 }}>
+                              <span style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: 20,
+                                height: 20,
+                                borderRadius: 6,
+                                background: s.iconBg,
+                                fontSize: 11,
+                              }}>{s.icon}</span>
+                              <span>{s.label}</span>
                             </div>
                             <p className="visit-section-text">{v[s.key]}</p>
                           </div>
@@ -269,7 +315,8 @@ export default function VisitsPage() {
               );
             })}
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Lightbox */}

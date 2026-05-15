@@ -184,9 +184,17 @@ function PortfolioContent() {
       // Deep link from broadcast / Done message:
       //   visit_<uuid>           → visit detail
       //   visit_<uuid>_training  → visit detail + auto-open training editor
+      // Telegram keeps start_param around for the whole Mini App session, so if
+      // the user navigates back to /m they'd get re-redirected forever. Track
+      // which value we've already handled in sessionStorage so each unique
+      // deep link fires once.
       const startParam = getStartParam();
-      const visitMatch = startParam?.match(/^visit_([0-9a-f-]{36})(?:_(training))?$/i);
-      if (visitMatch) {
+      const lastHandled = sessionStorage.getItem("sva-deeplink-handled");
+      const visitMatch = startParam && startParam !== lastHandled
+        ? startParam.match(/^visit_([0-9a-f-]{36})(?:_(training))?$/i)
+        : null;
+      if (visitMatch && startParam) {
+        sessionStorage.setItem("sva-deeplink-handled", startParam);
         const action = visitMatch[2];
         router.replace(`/m/visit/${visitMatch[1]}${action ? `#${action}` : ""}`);
         return;

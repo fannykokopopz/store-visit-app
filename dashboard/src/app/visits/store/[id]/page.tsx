@@ -21,7 +21,6 @@ interface StoreVisit {
   display_stock: string | null;
   follow_up: string | null;
   buzz_plan: string | null;
-  training: string | null;
   photo_count: number;
   thumb_urls: string[];
   photo_urls: string[];
@@ -37,12 +36,11 @@ const TIER_STYLE: Record<string, { bg: string; color: string }> = {
 };
 
 const SECTIONS = [
-  { key: "good_news",     label: "Good News",             icon: "🌟", bg: "var(--color-section-amber-bg)",  border: "var(--color-section-amber-border)",  color: "var(--color-tc-600)" },
-  { key: "competitors",   label: "Competitors' Insights", icon: "🔍", bg: "var(--color-section-blue-bg)",   border: "var(--color-section-blue-border)",   color: "var(--color-tier-t1-fg)" },
-  { key: "display_stock", label: "Display & Stock",       icon: "📦", bg: "var(--color-section-green-bg)",  border: "var(--color-section-green-border)",  color: "var(--color-tier-t2-fg)" },
-  { key: "follow_up",     label: "What to Follow Up",     icon: "✅", bg: "var(--color-section-pink-bg)",   border: "var(--color-section-pink-border)",   color: "#C0185A" },
-  { key: "buzz_plan",     label: "Buzz Plan",             icon: "⚡", bg: "var(--color-section-purple-bg)", border: "var(--color-section-purple-border)", color: "#5B2DB5" },
-  { key: "training",      label: "Training",              icon: "🎓", bg: "var(--color-section-teal-bg)",   border: "var(--color-section-teal-border)",   color: "var(--color-section-teal-fg)" },
+  { key: "good_news",     label: "Good News",             icon: "🌟", iconBg: "var(--color-section-amber-bg)",  color: "var(--color-tc-600)" },
+  { key: "competitors",   label: "Competitors' Insights", icon: "🔍", iconBg: "var(--color-section-blue-bg)",   color: "var(--color-tier-t1-fg)" },
+  { key: "display_stock", label: "Display & Stock",       icon: "📦", iconBg: "var(--color-section-green-bg)",  color: "var(--color-tier-t2-fg)" },
+  { key: "follow_up",     label: "What to Follow Up",     icon: "✅", iconBg: "var(--color-section-pink-bg)",   color: "#C0185A" },
+  { key: "buzz_plan",     label: "Buzz Plan",             icon: "⚡", iconBg: "var(--color-section-purple-bg)", color: "#5B2DB5" },
 ] as const;
 
 function fmtDate(d: string) {
@@ -168,21 +166,6 @@ export default function StoreDashboardPage({ params }: { params: Promise<{ id: s
                                     <span className="visit-meta-item">📸 {v.photo_count}</span>
                                   </>
                                 )}
-                                {filledSections.length > 0 && (
-                                  <>
-                                    <span className="visit-meta-item">·</span>
-                                    <span className="visit-sections">
-                                      {Array.from({ length: 6 }, (_, i) => (
-                                        <span
-                                          key={i}
-                                          className="visit-section-dot"
-                                          style={{ background: i < filledSections.length ? "var(--color-tc-500)" : "var(--color-ink-100)" }}
-                                        />
-                                      ))}
-                                      <span className="visit-meta-item" style={{ marginLeft: 4 }}>{filledSections.length}/6</span>
-                                    </span>
-                                  </>
-                                )}
                               </div>
                             </div>
                           </div>
@@ -211,10 +194,20 @@ export default function StoreDashboardPage({ params }: { params: Promise<{ id: s
                                   <div
                                     key={s.key}
                                     className="visit-section-card"
-                                    style={{ background: s.bg, border: `1px solid ${s.border}` }}
+                                    style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
                                   >
-                                    <div className="visit-section-label" style={{ color: s.color }}>
-                                      <span>{s.icon}</span><span>{s.label}</span>
+                                    <div className="visit-section-label" style={{ color: s.color, gap: 6 }}>
+                                      <span style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        width: 20,
+                                        height: 20,
+                                        borderRadius: 6,
+                                        background: s.iconBg,
+                                        fontSize: 11,
+                                      }}>{s.icon}</span>
+                                      <span>{s.label}</span>
                                     </div>
                                     <p className="visit-section-text">{v[s.key]}</p>
                                   </div>

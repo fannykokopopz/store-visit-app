@@ -47,14 +47,14 @@ const SECTIONS: Array<{
   key: SectionKey;
   label: string;
   icon: string;
-  colorClass: string;
+  iconBgClass: string;
   titleClass: string;
 }> = [
-  { key: "good_news",     label: "Good News",             icon: "🌟", colorClass: "bg-[var(--color-section-amber-bg)] border-[var(--color-section-amber-border)]",   titleClass: "text-[var(--color-tc-600)]" },
-  { key: "competitors",   label: "Competitors' Insights", icon: "🔍", colorClass: "bg-[var(--color-section-blue-bg)] border-[var(--color-section-blue-border)]",    titleClass: "text-[var(--color-tier-t1-fg)]" },
-  { key: "display_stock", label: "Display & Stock",       icon: "📦", colorClass: "bg-[var(--color-section-green-bg)] border-[var(--color-section-green-border)]",  titleClass: "text-[var(--color-tier-t2-fg)]" },
-  { key: "follow_up",     label: "What to Follow Up",     icon: "✅", colorClass: "bg-[var(--color-section-pink-bg)] border-[var(--color-section-pink-border)]",   titleClass: "text-[#C0185A]" },
-  { key: "buzz_plan",     label: "Buzz Plan",             icon: "⚡", colorClass: "bg-[var(--color-section-purple-bg)] border-[var(--color-section-purple-border)]", titleClass: "text-[#5B2DB5]" },
+  { key: "good_news",     label: "Good News",             icon: "🌟", iconBgClass: "bg-[var(--color-section-amber-bg)]",  titleClass: "text-[var(--color-tc-600)]" },
+  { key: "competitors",   label: "Competitors' Insights", icon: "🔍", iconBgClass: "bg-[var(--color-section-blue-bg)]",   titleClass: "text-[var(--color-tier-t1-fg)]" },
+  { key: "display_stock", label: "Display & Stock",       icon: "📦", iconBgClass: "bg-[var(--color-section-green-bg)]",  titleClass: "text-[var(--color-tier-t2-fg)]" },
+  { key: "follow_up",     label: "What to Follow Up",     icon: "✅", iconBgClass: "bg-[var(--color-section-pink-bg)]",   titleClass: "text-[#C0185A]" },
+  { key: "buzz_plan",     label: "Buzz Plan",             icon: "⚡", iconBgClass: "bg-[var(--color-section-purple-bg)]", titleClass: "text-[#5B2DB5]" },
 ];
 
 function fmtDate(dateStr: string): string {
@@ -278,9 +278,9 @@ function VisitCard({
       {filledSections.length > 0 && (
         <div className="space-y-2">
           {filledSections.map((s) => (
-            <div key={s.key} className={`rounded-[14px] border p-3 ${s.colorClass}`}>
+            <div key={s.key} className="rounded-[14px] border border-ink-100 bg-white p-3">
               <div className="flex items-center gap-1.5 mb-1.5">
-                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white/60 text-xs">
+                <span className={`flex h-6 w-6 items-center justify-center rounded-md text-xs ${s.iconBgClass}`}>
                   {s.icon}
                 </span>
                 <span className={`text-[10px] font-extrabold uppercase tracking-wider ${s.titleClass}`}>
