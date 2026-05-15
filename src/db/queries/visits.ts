@@ -57,6 +57,38 @@ export async function setVisitGrade(
   return true;
 }
 
+export async function updateVisitGrade(
+  visitId: string,
+  grade: 1 | 2 | 3,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('visits')
+    .update({ grade, edited_at: new Date().toISOString() })
+    .eq('id', visitId);
+
+  if (error) {
+    console.error('updateVisitGrade error:', error);
+    return false;
+  }
+  return true;
+}
+
+export async function updateVisitGradeComments(
+  visitId: string,
+  comments: string | null,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('visits')
+    .update({ grade_comments: comments, edited_at: new Date().toISOString() })
+    .eq('id', visitId);
+
+  if (error) {
+    console.error('updateVisitGradeComments error:', error);
+    return false;
+  }
+  return true;
+}
+
 export async function attachVisitSections(
   visitId: string,
   sections: ParsedSections,

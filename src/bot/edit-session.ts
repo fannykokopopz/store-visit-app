@@ -1,13 +1,22 @@
+type EditMode = 'notes' | 'grade-comment';
+
 interface EditSession {
   visitId: string;
   storeName: string;
+  mode: EditMode;
 }
 
-// Tracks CMs who tapped ✏️ Edit — waiting for them to resend updated template.
+// Tracks CMs who tapped ✏️ Edit — waiting for them to resend updated template
+// or a grade comment, depending on mode.
 const editSessions = new Map<number, EditSession>();
 
-export function startEditSession(telegramId: number, visitId: string, storeName: string): void {
-  editSessions.set(telegramId, { visitId, storeName });
+export function startEditSession(
+  telegramId: number,
+  visitId: string,
+  storeName: string,
+  mode: EditMode = 'notes',
+): void {
+  editSessions.set(telegramId, { visitId, storeName, mode });
 }
 
 export function isEditing(telegramId: number): boolean {

@@ -16,7 +16,7 @@ import { visitFlow } from './conversations/visit-flow.js';
 import { joinRequestFlow } from './conversations/join-request.js';
 import { initPhotoCollection, isCollecting, handleIncomingPhoto } from './photo-collection.js';
 import { startEditSession, isEditing, getEditSession, clearEditSession } from './edit-session.js';
-import { getVisitInfo, updateVisitSections, deleteVisit } from '../db/queries/visits.js';
+import { getVisitInfo, updateVisitSections, updateVisitGrade, updateVisitGradeComments, deleteVisit } from '../db/queries/visits.js';
 import { approvePendingCM, rejectPendingCM, getCMRecord, type CM } from '../db/queries/cms.js';
 import { parseTemplate, filledCount } from '../utils/parse-template.js';
 import { sendVisitDetails } from './visit-details.js';
@@ -55,7 +55,8 @@ export function createBot(): Bot<BotContext> {
     if (p) await handleIncomingPhoto(telegramId, p[p.length - 1].file_id);
   });
 
-  // Edit mode: CM resends filled template after tapping ✏️ Edit
+  // Edit mode: CM resends filled template (notes) or comment (grade-comment)
+  // after tapping ✏️ Edit → step.
   bot.on(['message:text', 'message:caption'], async (ctx, next) => {
     const telegramId = ctx.from?.id ?? 0;
     if (!isEditing(telegramId)) return next();
@@ -72,14 +73,23 @@ export function createBot(): Bot<BotContext> {
     }
 
     clearEditSession(telegramId);
-    const sections = parseTemplate(text);
-    const filled = filledCount(sections);
-    const ok = await updateVisitSections(session.visitId, sections);
 
-    if (ok) {
-      await ctx.reply(`✅ Updated — ${session.storeName} · ${filled}/6 sections`);
-    } else {
-      await ctx.reply("Something went wrong — give it another try 🙏");
+    if (session.mode === 'notes') {
+      const sections = parseTemplate(text);
+      const filled = filledCount(sections);
+      const ok = await updateVisitSections(session.visitId, sections);
+      if (ok) {
+        await ctx.reply(`✅ Updated — ${session.storeName} · ${filled}/6 sections`);
+      } else {
+        await ctx.reply("Something went wrong — give it another try 🙏");
+      }
+    } else if (session.mode === 'grade-comment') {
+      const ok = await updateVisitGradeComments(session.visitId, text);
+      if (ok) {
+        await ctx.reply(`✅ Grade comment saved.`);
+      } else {
+        await ctx.reply("Something went wrong — give it another try 🙏");
+      }
     }
   });
 
@@ -108,8 +118,8 @@ export function createBot(): Bot<BotContext> {
     await ctx.editMessageReplyMarkup({ reply_markup: undefined });
   });
 
-  // Edit button — send the template back and enter edit mode
-  bot.callbackQuery(/^edit:/, async (ctx) => {
+  // Edit button — show step picker (Notes / Grade / Training)
+  bot.callbackQuery(/^edit:[0-9a-f-]{36}$/i, async (ctx) => {
     const visitId = ctx.callbackQuery.data.replace('edit:', '');
     const info = await getVisitInfo(visitId);
 
@@ -122,12 +132,119 @@ export function createBot(): Bot<BotContext> {
       return;
     }
 
-    startEditSession(ctx.from.id, visitId, info.store_name);
     await ctx.answerCallbackQuery();
     await ctx.reply(
-      `✏️ *Editing — ${info.store_name}*\n\nSend your updated notes and I'll swap them in 🔄\n\n` +
+      `✏️ *Editing — ${info.store_name}*\n\nWhich step do you want to change?`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: new InlineKeyboard()
+          .text('📝 Notes', `edit:notes:${visitId}`).row()
+          .text('📊 Grade', `edit:grade:${visitId}`).row()
+          .text('🎓 Training', `edit:training:${visitId}`).row()
+          .text('Cancel', 'cancel_action'),
+      },
+    );
+  });
+
+  // Edit Notes — same template-paste flow as before
+  bot.callbackQuery(/^edit:notes:/, async (ctx) => {
+    const visitId = ctx.callbackQuery.data.replace('edit:notes:', '');
+    const info = await getVisitInfo(visitId);
+    if (!info || info.cm_telegram_id !== ctx.from?.id) {
+      await ctx.answerCallbackQuery('Not allowed.');
+      return;
+    }
+    startEditSession(ctx.from.id, visitId, info.store_name, 'notes');
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+    await ctx.reply(
+      `📝 *Editing Notes — ${info.store_name}*\n\nSend your updated notes and I'll swap them in 🔄\n\n` +
       `\`\`\`\n🌟 Good News\n\n\n🔍 Competitors' Insights\n\n\n📦 Display & Stock\n\n\n✅ What to Follow Up\n\n\n⚡ Buzz Plan\n\n\n🎓 Training\n\`\`\`\n\n_/cancel to stop_`,
       { parse_mode: 'Markdown' },
+    );
+  });
+
+  // Edit Grade — show 1/2/3 picker
+  bot.callbackQuery(/^edit:grade:[0-9a-f-]{36}$/i, async (ctx) => {
+    const visitId = ctx.callbackQuery.data.replace('edit:grade:', '');
+    const info = await getVisitInfo(visitId);
+    if (!info || info.cm_telegram_id !== ctx.from?.id) {
+      await ctx.answerCallbackQuery('Not allowed.');
+      return;
+    }
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+    await ctx.reply(
+      `📊 *Re-grade — ${info.store_name}*\n\nTap the new grade:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: new InlineKeyboard()
+          .text('1', `edit:grade:set:${visitId}:1`)
+          .text('2', `edit:grade:set:${visitId}:2`)
+          .text('3', `edit:grade:set:${visitId}:3`),
+      },
+    );
+  });
+
+  bot.callbackQuery(/^edit:grade:set:[0-9a-f-]{36}:[123]$/i, async (ctx) => {
+    const rest = ctx.callbackQuery.data.replace('edit:grade:set:', '');
+    const [visitId, gradeStr] = rest.split(':');
+    const grade = Number(gradeStr) as 1 | 2 | 3;
+    const info = await getVisitInfo(visitId);
+    if (!info || info.cm_telegram_id !== ctx.from?.id) {
+      await ctx.answerCallbackQuery('Not allowed.');
+      return;
+    }
+    const ok = await updateVisitGrade(visitId, grade);
+    if (!ok) {
+      await ctx.answerCallbackQuery('Failed.');
+      return;
+    }
+    startEditSession(ctx.from.id, visitId, info.store_name, 'grade-comment');
+    await ctx.answerCallbackQuery(`Grade ${grade} ✓`);
+    await ctx.editMessageText(
+      `📊 *Grade ${grade} ✓* — ${info.store_name}\n\nAdd a comment for this grade? Type it, or tap Skip.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: new InlineKeyboard().text('Skip', `edit:grade:skipcomment:${visitId}`),
+      },
+    );
+  });
+
+  bot.callbackQuery(/^edit:grade:skipcomment:/, async (ctx) => {
+    clearEditSession(ctx.from?.id ?? 0);
+    await ctx.answerCallbackQuery('Skipped');
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+    await ctx.reply('✅ Grade updated.');
+  });
+
+  // Edit Training — deep-link to mini-app training editor
+  bot.callbackQuery(/^edit:training:/, async (ctx) => {
+    const visitId = ctx.callbackQuery.data.replace('edit:training:', '');
+    const info = await getVisitInfo(visitId);
+    if (!info || info.cm_telegram_id !== ctx.from?.id) {
+      await ctx.answerCallbackQuery('Not allowed.');
+      return;
+    }
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+
+    if (!config.broadcast.botUsername) {
+      await ctx.reply(
+        `🎓 Open the visit in the mini-app to edit training.`,
+      );
+      return;
+    }
+
+    const deepLink =
+      `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}` +
+      `?startapp=visit_${visitId}_training`;
+    await ctx.reply(
+      `🎓 *Edit Training — ${info.store_name}*\n\nOpens the training editor in the mini-app:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: new InlineKeyboard().url('📝 Open training editor', deepLink),
+      },
     );
   });
 
