@@ -135,7 +135,7 @@ export async function getVisitsFeed(opts: {
 
   let q = supabase
     .from("visits")
-    .select("*, stores(name, chain, tier), cms(full_name)", { count: "exact" })
+    .select("*, stores(name, chain, tier), cms!cm_telegram_id(full_name)", { count: "exact" })
     .eq("is_locked", true)
     .order("visit_date", { ascending: false })
     .order("created_at", { ascending: false })
@@ -299,7 +299,7 @@ export async function getStoreDashboard(storeId: string): Promise<{ store: Store
     supabase.from('stores').select('id, name, chain, market, tier').eq('id', storeId).single(),
     supabase
       .from('visits')
-      .select('id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, cms(full_name, nickname)')
+      .select('id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, cms!cm_telegram_id(full_name, nickname)')
       .eq('store_id', storeId)
       .eq('is_locked', true)
       .order('visit_date', { ascending: false }),

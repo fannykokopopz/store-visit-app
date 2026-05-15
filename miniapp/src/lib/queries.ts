@@ -145,7 +145,7 @@ export async function getStoreTimelineForCM(
     options?.allCMs
       ? supabase
           .from("visits")
-          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, grade, grade_comments, cm_telegram_id, cms(full_name, nickname)")
+          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, grade, grade_comments, cm_telegram_id, cms!cm_telegram_id(full_name, nickname)")
           .eq("store_id", storeId)
           .eq("is_locked", true)
           .order("visit_date", { ascending: false })
@@ -229,7 +229,7 @@ export async function getAllStoresInMarket(market: string): Promise<AllMarketSto
   const storeIds = storeRows.map((s: any) => s.id); // eslint-disable-line @typescript-eslint/no-explicit-any
   const { data: visitRows } = await supabase
     .from("visits")
-    .select("store_id, visit_date, created_at, cms(full_name, nickname)")
+    .select("store_id, visit_date, created_at, cms!cm_telegram_id(full_name, nickname)")
     .in("store_id", storeIds)
     .eq("is_locked", true)
     .order("visit_date", { ascending: false })
@@ -307,7 +307,7 @@ export async function searchVisitsInMarket(
   const query = (options.q ?? "").trim();
   const useTextSearch = query.length >= 2;
 
-  const baseSelect = "id, visit_date, store_id, good_news, competitors, display_stock, follow_up, buzz_plan, training, cms(full_name, nickname)";
+  const baseSelect = "id, visit_date, store_id, good_news, competitors, display_stock, follow_up, buzz_plan, training, cms!cm_telegram_id(full_name, nickname)";
   const filterByCM = options.cmTelegramId !== undefined;
 
   let q = supabase
