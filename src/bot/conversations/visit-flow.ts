@@ -16,7 +16,7 @@ import { getActivePlan, consumePlan } from '../../db/queries/visit-plans.js';
 import { buildStorePicker, buildSearchResultsPicker, buildStoreContextMessage } from '../keyboards/store-picker.js';
 import { buildTemplateMessage } from '../../utils/template.js';
 import { parseTemplate, filledCount } from '../../utils/parse-template.js';
-import { startPhotoCollection, handleIncomingPhoto } from '../photo-collection.js';
+import { startPhotoCollection, handleIncomingPhoto, awaitPhotoUpload } from '../photo-collection.js';
 import { sendVisitDetails } from '../visit-details.js';
 import { broadcastVisitLocked } from '../../notifications/visit-broadcast.js';
 import { config } from '../../config.js';
@@ -481,9 +481,9 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     trainedStaffIds.push(...tagged);
   }
 
-  // ── Finalize: grade, training, lock ────────────────────────────────────────
+  // ── Finalize: grade, training, lock, then wait for photo uploads ──────────
 
-  await conversation.external(async () => {
+  const savedPhotos = await conversation.external(async () => {
     if (grade !== null) await setVisitGrade(visit.id, grade, gradeComments);
     if (trainedStaffIds.length > 0) {
       await attachTrainedStaffToVisit(
@@ -493,9 +493,10 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
     await lockVisit(visit.id);
     if (plan) await consumePlan(plan.id);
-    // Broadcast to group chat after lock. Photos may still be uploading; the
-    // deep-linked visit page will pick them up as their DB rows insert.
     await broadcastVisitLocked(visit.id, ctx.api).catch(() => {});
+    // Wait for photo debounce + uploads so the Done message can include the
+    // final saved count instead of leaving the user with a "loading" feel.
+    return await awaitPhotoUpload(visit.id);
   });
 
   // ── Unified Done message ──────────────────────────────────────────────────
@@ -503,10 +504,14 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   const trainedLine = trainedStaffIds.length > 0
     ? ` · ${trainedStaffIds.length} staff trained`
     : '';
+  const photoLine = savedPhotos > 0
+    ? `\n📸 ${savedPhotos} ${savedPhotos === 1 ? 'photo' : 'photos'} saved`
+    : '';
 
   await ctx.reply(
     `🎉 *${storeName}* logged ✓\n` +
-    `Grade ${grade}${trainedLine}`,
+    `Grade ${grade}${trainedLine}` +
+    photoLine,
     {
       parse_mode: 'Markdown',
       reply_markup: buildDoneKeyboard(visit.id),

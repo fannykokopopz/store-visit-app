@@ -9,10 +9,14 @@ interface PhotoCollection {
   sections: number;
   fileIds: string[];
   timer: NodeJS.Timeout | null;
+  resolveDone: (n: number) => void;
 }
 
 // Process-level state — persists within Railway's single-process lifetime.
 const collections = new Map<number, PhotoCollection>();
+// Keyed by visitId so awaiters can read the saved count even after the
+// active collection has been deleted on finalize.
+const pendingResults = new Map<string, Promise<number>>();
 
 // Set once at startup via initPhotoCollection(bot.api).
 // Using bot.api directly avoids the grammY conversation replay wrapper,
@@ -43,11 +47,17 @@ export function startPhotoCollection(
     fileIds = [];
   }
 
-  const collection: PhotoCollection = { visitId, storeId, storeName, sections, fileIds, timer: null };
+  let resolveDone!: (n: number) => void;
+  const done = new Promise<number>((r) => { resolveDone = r; });
+  pendingResults.set(visitId, done);
+
+  const collection: PhotoCollection = {
+    visitId, storeId, storeName, sections, fileIds, timer: null, resolveDone,
+  };
   collections.set(telegramId, collection);
 
   // Always start the debounce. If photos arrive they reset the timer;
-  // if none come in 2s, finalize immediately with no photo line.
+  // if none come in 2s, finalize immediately.
   collection.timer = setTimeout(() => finalizeCollection(telegramId), 2000);
 }
 
@@ -66,6 +76,17 @@ export async function handleIncomingPhoto(telegramId: number, fileId: string): P
   collection.timer = setTimeout(() => finalizeCollection(telegramId), 2000);
 }
 
+// Awaited by the visit conversation right before the Done message,
+// so the final reply can include the saved count instead of a stray
+// follow-up arriving later.
+export async function awaitPhotoUpload(visitId: string): Promise<number> {
+  const p = pendingResults.get(visitId);
+  if (!p) return 0;
+  const saved = await p;
+  pendingResults.delete(visitId);
+  return saved;
+}
+
 async function finalizeCollection(telegramId: number): Promise<void> {
   const collection = collections.get(telegramId);
   if (!collection) return;
@@ -73,6 +94,7 @@ async function finalizeCollection(telegramId: number): Promise<void> {
 
   if (!botApi) {
     console.error('[photos] botApi not initialized — call initPhotoCollection(bot.api) at startup');
+    collection.resolveDone(0);
     return;
   }
 
@@ -90,10 +112,5 @@ async function finalizeCollection(telegramId: number): Promise<void> {
     }
   }
 
-  if (saved > 0) {
-    const plural = saved === 1 ? 'photo' : 'photos';
-    await botApi
-      .sendMessage(telegramId, `📸 ${saved} ${plural} saved ✓`)
-      .catch((err) => console.error('[photos] confirm send error:', err));
-  }
+  collection.resolveDone(saved);
 }
