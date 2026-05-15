@@ -503,14 +503,10 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   const trainedLine = trainedStaffIds.length > 0
     ? ` · ${trainedStaffIds.length} staff trained`
     : '';
-  const photoLine = albumPhotoFileIds.length > 0
-    ? `\n\n📸 _Photos saving in background_`
-    : '';
 
   await ctx.reply(
     `🎉 *${storeName}* logged ✓\n` +
-    `Grade ${grade}${trainedLine}` +
-    photoLine,
+    `Grade ${grade}${trainedLine}`,
     {
       parse_mode: 'Markdown',
       reply_markup: buildDoneKeyboard(visit.id),

@@ -76,6 +76,7 @@ async function finalizeCollection(telegramId: number): Promise<void> {
     return;
   }
 
+  let saved = 0;
   for (const fileId of collection.fileIds) {
     try {
       const file = await botApi.getFile(fileId);
@@ -83,8 +84,16 @@ async function finalizeCollection(telegramId: number): Promise<void> {
       const resp = await fetch(url);
       const buffer = Buffer.from(await resp.arrayBuffer());
       await uploadVisitPhoto(collection.visitId, buffer, collection.storeId);
+      saved++;
     } catch (err) {
       console.error('[photos] upload error:', err);
     }
+  }
+
+  if (saved > 0) {
+    const plural = saved === 1 ? 'photo' : 'photos';
+    await botApi
+      .sendMessage(telegramId, `📸 ${saved} ${plural} saved ✓`)
+      .catch((err) => console.error('[photos] confirm send error:', err));
   }
 }
