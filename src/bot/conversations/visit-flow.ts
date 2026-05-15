@@ -191,7 +191,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   const plan = await conversation.external(() => getActivePlan(telegramId, storeId));
 
   // ── Step 1b: Co-CM picker ─────────────────────────────────────────────────
-  // Skip silently if no other CMs in the same market.
+  // Y/N gate first — most visits are solo. Skip silently if no other CMs in market.
 
   const market = ctx.user?.market ?? 'SG';
   const marketCMs = await conversation.external(() => getAllCMs(market));
@@ -200,10 +200,15 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   const coCMIds = new Set<number>();
 
   if (pickableCMs.length > 0) {
-    const pickerMsg = await ctx.reply(
-      "Anyone visiting with you? Tap names to tag co-CMs, then ✅ Done. Or pick Solo visit.",
-      { reply_markup: buildCoCMPicker(pickableCMs, coCMIds) },
-    );
+    await ctx.reply("Anyone visiting with you today?", {
+      reply_markup: new InlineKeyboard()
+        .text('Solo visit', 'coCM:solo')
+        .text('Tag co-CMs', 'coCM:start'),
+    });
+
+    let pickerOpen = false;
+    let pickerMsgChatId: number | null = null;
+    let pickerMsgId: number | null = null;
 
     coCMLoop: while (true) {
       const upd = await conversation.wait();
@@ -216,21 +221,39 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
       const data = upd.callbackQuery.data ?? '';
 
-      if (data === 'coCM:done' || data === 'coCM:solo') {
+      if (!pickerOpen && data === 'coCM:solo') {
+        await upd.answerCallbackQuery('Solo');
+        break coCMLoop;
+      }
+      if (!pickerOpen && data === 'coCM:start') {
+        await upd.answerCallbackQuery();
+        const pickerMsg = await ctx.reply(
+          "Tap names to tag co-CMs, then ✅ Done.",
+          { reply_markup: buildCoCMPicker(pickableCMs, coCMIds) },
+        );
+        pickerMsgChatId = pickerMsg.chat.id;
+        pickerMsgId = pickerMsg.message_id;
+        pickerOpen = true;
+        continue;
+      }
+
+      if (pickerOpen && (data === 'coCM:done' || data === 'coCM:solo')) {
         if (data === 'coCM:solo') coCMIds.clear();
         await upd.answerCallbackQuery(data === 'coCM:solo' ? 'Solo' : `Tagged ${coCMIds.size}`);
         break coCMLoop;
       }
 
       const m = data.match(/^coCM:(\d+)$/);
-      if (m) {
+      if (pickerOpen && m) {
         const id = Number(m[1]);
         if (coCMIds.has(id)) coCMIds.delete(id);
         else coCMIds.add(id);
         await upd.answerCallbackQuery();
-        await ctx.api.editMessageReplyMarkup(pickerMsg.chat.id, pickerMsg.message_id, {
-          reply_markup: buildCoCMPicker(pickableCMs, coCMIds),
-        });
+        if (pickerMsgChatId !== null && pickerMsgId !== null) {
+          await ctx.api.editMessageReplyMarkup(pickerMsgChatId, pickerMsgId, {
+            reply_markup: buildCoCMPicker(pickableCMs, coCMIds),
+          }).catch(() => {});
+        }
         continue;
       }
 

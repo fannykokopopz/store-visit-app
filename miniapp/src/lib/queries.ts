@@ -520,33 +520,36 @@ export async function getTrainingStatsForCM(
   fromDate?: string,
   toDate?: string,
 ): Promise<TrainingStats> {
-  // Pull visit_staff rows for visits where this CM is in visit_cms (lead or co)
-  // and was_trained = true. Then aggregate.
-  let q = supabase
+  // Step 1: visit IDs this CM is associated with (lead or co)
+  let visitQ = supabase
+    .from("visits")
+    .select("id, visit_cms!inner(cm_telegram_id)")
+    .eq("visit_cms.cm_telegram_id", telegramId)
+    .eq("is_locked", true);
+  if (fromDate) visitQ = visitQ.gte("visit_date", fromDate);
+  if (toDate) visitQ = visitQ.lte("visit_date", toDate);
+
+  const { data: visitIdRows } = await visitQ;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const visitIds = ((visitIdRows ?? []) as any[]).map((r) => r.id as string);
+  if (visitIds.length === 0) {
+    return { staff_trained_count: 0, visits_with_training: 0, recent: [] };
+  }
+
+  // Step 2: trained visit_staff rows for those visits, with staff + store names
+  const { data: trainedRows } = await supabase
     .from("visit_staff")
-    .select(`
-      staff_id,
-      products_trained_on,
-      visits!inner(id, visit_date, is_locked, stores(name), visit_cms!inner(cm_telegram_id)),
-      staff(name)
-    `)
+    .select("staff_id, products_trained_on, visit_id, visits(visit_date, stores(name)), staff(name)")
     .eq("was_trained", true)
-    .eq("visits.is_locked", true)
-    .eq("visits.visit_cms.cm_telegram_id", telegramId);
-
-  if (fromDate) q = q.gte("visits.visit_date", fromDate);
-  if (toDate) q = q.lte("visits.visit_date", toDate);
-
-  const { data, error } = await q;
-  if (error || !data) return { staff_trained_count: 0, visits_with_training: 0, recent: [] };
+    .in("visit_id", visitIds);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = data as any[];
+  const rows = (trainedRows ?? []) as any[];
   const distinctStaff = new Set<string>();
   const distinctVisits = new Set<string>();
   for (const r of rows) {
     if (r.staff_id) distinctStaff.add(r.staff_id);
-    if (r.visits?.id) distinctVisits.add(r.visits.id);
+    if (r.visit_id) distinctVisits.add(r.visit_id);
   }
 
   const recent = rows
