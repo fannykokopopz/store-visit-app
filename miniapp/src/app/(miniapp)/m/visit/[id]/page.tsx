@@ -115,6 +115,9 @@ function fmtDate(dateStr: string): string {
   });
 }
 
+// Placeholder brand list — Wilson will supply the full catalogue later.
+const PRODUCT_SUGGESTIONS = ["Marshall", "Bowers & Wilkins", "Sonos"];
+
 export default function VisitPage({
   params,
 }: {
@@ -150,6 +153,22 @@ export default function VisitPage({
       setData(await res.json());
     })().catch((e) => setError(String(e)));
   }, [id]);
+
+  // Deep-link from bot's Done message: /m/visit/{id}#training opens the
+  // training editor automatically. Hash is cleared so a refresh doesn't
+  // re-trigger.
+  useEffect(() => {
+    if (!data) return;
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== "#training") return;
+    if (!data.canEditTraining) return;
+    if (data.visit.trained_staff.length === 0) return;
+    const drafts: Record<string, string> = {};
+    for (const s of data.visit.trained_staff) drafts[s.staff_id] = s.products ?? "";
+    setTrainingDrafts(drafts);
+    setEditingTraining(true);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [data]);
 
   function openCMEditor() {
     if (!data || !initData) return;
@@ -407,20 +426,52 @@ export default function VisitPage({
             <p className="text-[11px] text-ink-300 mb-3">Add the products you trained each staff on.</p>
 
             <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-3">
-              {trainedStaff.map((s) => (
-                <div key={s.staff_id}>
-                  <label className="text-[11px] font-bold text-ink-500 mb-1 block">{s.name}</label>
-                  <textarea
-                    value={trainingDrafts[s.staff_id] ?? ""}
-                    onChange={(e) =>
-                      setTrainingDrafts((curr) => ({ ...curr, [s.staff_id]: e.target.value }))
-                    }
-                    placeholder="e.g. Klipsch RP-600M, SVS PB-1000"
-                    rows={2}
-                    className="w-full resize-none rounded-xl border border-ink-100 bg-ink-50 px-3 py-2 text-[13px] text-ink-700 placeholder:text-ink-300 focus:bg-white focus:border-[var(--color-tc-200)] focus:outline-none"
-                  />
-                </div>
-              ))}
+              {trainedStaff.map((s) => {
+                const draft = trainingDrafts[s.staff_id] ?? "";
+                const present = new Set(
+                  draft.split(/[,\n]/).map((p) => p.trim().toLowerCase()).filter(Boolean),
+                );
+                return (
+                  <div key={s.staff_id}>
+                    <label className="text-[11px] font-bold text-ink-500 mb-1 block">{s.name}</label>
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      {PRODUCT_SUGGESTIONS.map((brand) => {
+                        const added = present.has(brand.toLowerCase());
+                        return (
+                          <button
+                            key={brand}
+                            type="button"
+                            onClick={() => {
+                              if (added) return;
+                              setTrainingDrafts((curr) => {
+                                const existing = curr[s.staff_id] ?? "";
+                                const sep = existing.trim() === "" ? "" : ", ";
+                                return { ...curr, [s.staff_id]: existing + sep + brand };
+                              });
+                            }}
+                            className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold border transition-colors ${
+                              added
+                                ? "bg-[var(--color-tc-50)] border-[var(--color-tc-200)] text-[var(--color-tc-600)]"
+                                : "bg-white border-ink-100 text-ink-500"
+                            }`}
+                          >
+                            {added ? "✓ " : "+ "}{brand}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <textarea
+                      value={draft}
+                      onChange={(e) =>
+                        setTrainingDrafts((curr) => ({ ...curr, [s.staff_id]: e.target.value }))
+                      }
+                      placeholder="Tap a brand above, or type your own"
+                      rows={2}
+                      className="w-full resize-none rounded-xl border border-ink-100 bg-ink-50 px-3 py-2 text-[13px] text-ink-700 placeholder:text-ink-300 focus:bg-white focus:border-[var(--color-tc-200)] focus:outline-none"
+                    />
+                  </div>
+                );
+              })}
             </div>
 
             <div className="flex gap-2 mt-4">

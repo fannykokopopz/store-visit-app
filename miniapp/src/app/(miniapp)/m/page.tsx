@@ -183,11 +183,14 @@ function PortfolioContent() {
       const id = await initTelegram();
       if (!id) { setError("Open this from inside Telegram."); return; }
 
-      // Deep link from a group broadcast: ?startapp=visit_<uuid>
+      // Deep link from broadcast / Done message:
+      //   visit_<uuid>           → visit detail
+      //   visit_<uuid>_training  → visit detail + auto-open training editor
       const startParam = getStartParam();
-      const visitMatch = startParam?.match(/^visit_([0-9a-f-]{36})$/i);
+      const visitMatch = startParam?.match(/^visit_([0-9a-f-]{36})(?:_(training))?$/i);
       if (visitMatch) {
-        router.replace(`/m/visit/${visitMatch[1]}`);
+        const action = visitMatch[2];
+        router.replace(`/m/visit/${visitMatch[1]}${action ? `#${action}` : ""}`);
         return;
       }
 

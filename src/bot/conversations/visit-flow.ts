@@ -38,13 +38,14 @@ function buildStaffPicker(staff: Staff[], selected: Set<string>): InlineKeyboard
   return kb;
 }
 
-function buildDoneKeyboard(visitId: string): InlineKeyboard {
+function buildDoneKeyboard(visitId: string, hasTraining: boolean): InlineKeyboard {
   const kb = new InlineKeyboard();
   if (config.broadcast.botUsername) {
-    const deepLink =
-      `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}` +
-      `?startapp=visit_${visitId}`;
-    kb.url('🔍 Open in mini-app', deepLink).row();
+    const base = `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}`;
+    if (hasTraining) {
+      kb.url('📝 Add product details', `${base}?startapp=visit_${visitId}_training`).row();
+    }
+    kb.url('🔍 Open in mini-app', `${base}?startapp=visit_${visitId}`).row();
   }
   kb.text('✏️ Edit', `edit:${visitId}`).text('🗑️ Delete', `delete:${visitId}`);
   return kb;
@@ -514,7 +515,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     photoLine,
     {
       parse_mode: 'Markdown',
-      reply_markup: buildDoneKeyboard(visit.id),
+      reply_markup: buildDoneKeyboard(visit.id, trainedStaffIds.length > 0),
     },
   );
 }
