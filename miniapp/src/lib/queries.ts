@@ -509,6 +509,64 @@ export async function insertVisitPhoto(
   return !error;
 }
 
+export interface TrainingStats {
+  staff_trained_count: number;
+  visits_with_training: number;
+  recent: { staff_name: string; products: string; visit_date: string; store_name: string }[];
+}
+
+export async function getTrainingStatsForCM(
+  telegramId: number,
+  fromDate?: string,
+  toDate?: string,
+): Promise<TrainingStats> {
+  // Pull visit_staff rows for visits where this CM is in visit_cms (lead or co)
+  // and was_trained = true. Then aggregate.
+  let q = supabase
+    .from("visit_staff")
+    .select(`
+      staff_id,
+      products_trained_on,
+      visits!inner(id, visit_date, is_locked, stores(name), visit_cms!inner(cm_telegram_id)),
+      staff(name)
+    `)
+    .eq("was_trained", true)
+    .eq("visits.is_locked", true)
+    .eq("visits.visit_cms.cm_telegram_id", telegramId);
+
+  if (fromDate) q = q.gte("visits.visit_date", fromDate);
+  if (toDate) q = q.lte("visits.visit_date", toDate);
+
+  const { data, error } = await q;
+  if (error || !data) return { staff_trained_count: 0, visits_with_training: 0, recent: [] };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = data as any[];
+  const distinctStaff = new Set<string>();
+  const distinctVisits = new Set<string>();
+  for (const r of rows) {
+    if (r.staff_id) distinctStaff.add(r.staff_id);
+    if (r.visits?.id) distinctVisits.add(r.visits.id);
+  }
+
+  const recent = rows
+    .map((r) => ({
+      staff_name: (r.staff?.name as string | null) ?? "Unknown",
+      products: (r.products_trained_on as string | null) ?? "",
+      visit_date: (r.visits?.visit_date as string | null) ?? "",
+      store_name: (r.visits?.stores?.name as string | null) ?? "",
+    }))
+    .filter((r) => r.products)
+    .sort((a, b) => (a.visit_date < b.visit_date ? 1 : -1))
+    .slice(0, 20);
+
+  return {
+    staff_trained_count: distinctStaff.size,
+    visits_with_training: distinctVisits.size,
+    recent,
+  };
+}
+
 export async function updateVisitCoCMs(
   visitId: string,
   coTelegramIds: number[],

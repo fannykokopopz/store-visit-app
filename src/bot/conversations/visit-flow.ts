@@ -6,12 +6,30 @@ import { searchStoresByName, getStoreById } from '../../db/queries/stores.js';
 import { createVisit, lockVisit, attachVisitSections, getLastVisitDatePerStore } from '../../db/queries/visits.js';
 import { setVisitCMs } from '../../db/queries/visit-cms.js';
 import { getAllCMs, type CM } from '../../db/queries/cms.js';
+import { getStaffForStore, createStaff, attachTrainedStaffToVisit, type Staff } from '../../db/queries/staff.js';
 import { getActivePlan, consumePlan } from '../../db/queries/visit-plans.js';
 import { buildStorePicker, buildSearchResultsPicker, buildStoreContextMessage } from '../keyboards/store-picker.js';
 import { buildTemplateMessage } from '../../utils/template.js';
 import { parseTemplate, filledCount } from '../../utils/parse-template.js';
 import { startPhotoCollection } from '../photo-collection.js';
 import { sendVisitDetails } from '../visit-details.js';
+
+function buildStaffPicker(staff: Staff[], selected: Set<string>): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  for (let i = 0; i < staff.length; i += 2) {
+    const a = staff[i];
+    const labelA = `${selected.has(a.id) ? '✓ ' : ''}${a.name}`;
+    kb.text(labelA, `staff:${a.id}`);
+    if (i + 1 < staff.length) {
+      const b = staff[i + 1];
+      const labelB = `${selected.has(b.id) ? '✓ ' : ''}${b.name}`;
+      kb.text(labelB, `staff:${b.id}`);
+    }
+    kb.row();
+  }
+  kb.text('✅ Done', 'staff:done').text('+ Add new', 'staff:add');
+  return kb;
+}
 
 function buildCoCMPicker(cms: CM[], selected: Set<number>): InlineKeyboard {
   const kb = new InlineKeyboard();
@@ -382,6 +400,136 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
   }
 
+  // ── Step 5b: Staff training ───────────────────────────────────────────────
+
+  type TrainedEntry = { staff_id: string; products: string };
+  const trainedEntries: TrainedEntry[] = [];
+
+  await ctx.reply('Did you train any staff today?', {
+    reply_markup: new InlineKeyboard().text('Yes', 'training:yes').text('No', 'training:no'),
+  });
+
+  let trainingChoice: 'yes' | 'no' | null = null;
+  while (trainingChoice === null) {
+    const upd = await conversation.wait();
+
+    if (upd.message?.text === '/cancel') {
+      await ctx.reply('No worries — visit cancelled.');
+      return;
+    }
+    if (upd.message?.photo) {
+      const p = upd.message.photo;
+      if (albumPhotoFileIds.length < 6) {
+        albumPhotoFileIds.push(p[p.length - 1].file_id);
+      }
+      continue;
+    }
+    if (upd.callbackQuery) {
+      const data = upd.callbackQuery.data ?? '';
+      if (data === 'training:yes') { trainingChoice = 'yes'; await upd.answerCallbackQuery(); }
+      else if (data === 'training:no') { trainingChoice = 'no'; await upd.answerCallbackQuery('Skipped'); }
+      else await upd.answerCallbackQuery().catch(() => {});
+    }
+  }
+
+  if (trainingChoice === 'yes') {
+    let staffList: Staff[] = await conversation.external(() => getStaffForStore(storeId));
+    const tagged = new Set<string>();
+
+    const pickerMsg = await ctx.reply(
+      'Tap staff you trained, then ✅ Done. Use + Add new if a staff member is missing.',
+      { reply_markup: buildStaffPicker(staffList, tagged) },
+    );
+
+    staffPickerLoop: while (true) {
+      const upd = await conversation.wait();
+
+      if (upd.message?.text === '/cancel') {
+        await ctx.reply('No worries — visit cancelled.');
+        return;
+      }
+      if (upd.message?.photo) {
+        const p = upd.message.photo;
+        if (albumPhotoFileIds.length < 6) {
+          albumPhotoFileIds.push(p[p.length - 1].file_id);
+        }
+        continue;
+      }
+      if (!upd.callbackQuery) continue;
+
+      const data = upd.callbackQuery.data ?? '';
+
+      if (data === 'staff:done') {
+        await upd.answerCallbackQuery(`${tagged.size} tagged`);
+        break staffPickerLoop;
+      }
+
+      if (data === 'staff:add') {
+        await upd.answerCallbackQuery();
+        await ctx.reply('Name of the new staff member?');
+        const nameUpd = await conversation.wait();
+        if (nameUpd.message?.text === '/cancel') {
+          await ctx.reply('No worries — visit cancelled.');
+          return;
+        }
+        const name = nameUpd.message?.text?.trim();
+        if (!name) {
+          await ctx.reply('No name received — back to the picker.');
+        } else {
+          const fresh = await conversation.external(() => createStaff({ name, store_id: storeId }));
+          if (fresh) {
+            staffList = [...staffList, fresh].sort((a, b) => a.name.localeCompare(b.name));
+            tagged.add(fresh.id);
+          }
+        }
+        await ctx.api.editMessageReplyMarkup(pickerMsg.chat.id, pickerMsg.message_id, {
+          reply_markup: buildStaffPicker(staffList, tagged),
+        }).catch(() => {});
+        continue;
+      }
+
+      const m = data.match(/^staff:([0-9a-f-]{36})$/i);
+      if (m) {
+        const sid = m[1];
+        if (tagged.has(sid)) tagged.delete(sid);
+        else tagged.add(sid);
+        await upd.answerCallbackQuery();
+        await ctx.api.editMessageReplyMarkup(pickerMsg.chat.id, pickerMsg.message_id, {
+          reply_markup: buildStaffPicker(staffList, tagged),
+        });
+        continue;
+      }
+
+      await upd.answerCallbackQuery().catch(() => {});
+    }
+
+    // Ask product per tagged staff
+    for (const sid of tagged) {
+      const staff = staffList.find((s) => s.id === sid);
+      if (!staff) continue;
+      await ctx.reply(`What products did you train ${staff.name} on?`);
+
+      while (true) {
+        const upd = await conversation.wait();
+        if (upd.message?.text === '/cancel') {
+          await ctx.reply('No worries — visit cancelled.');
+          return;
+        }
+        if (upd.message?.photo) {
+          const p = upd.message.photo;
+          if (albumPhotoFileIds.length < 6) {
+            albumPhotoFileIds.push(p[p.length - 1].file_id);
+          }
+          continue;
+        }
+        const text = upd.message?.text?.trim();
+        if (!text) continue;
+        trainedEntries.push({ staff_id: sid, products: text });
+        break;
+      }
+    }
+  }
+
   // ── Step 6: Save and lock ─────────────────────────────────────────────────
 
   const visit = await conversation.external(() =>
@@ -402,6 +550,9 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   await conversation.external(() =>
     setVisitCMs(visit.id, telegramId, Array.from(coCMIds)),
   );
+  if (trainedEntries.length > 0) {
+    await conversation.external(() => attachTrainedStaffToVisit(visit.id, trainedEntries));
+  }
   await conversation.external(() => lockVisit(visit.id));
   if (plan) await conversation.external(() => consumePlan(plan.id));
 

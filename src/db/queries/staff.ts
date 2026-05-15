@@ -69,3 +69,27 @@ export async function attachStaffToVisit(
   const { error } = await supabase.from('visit_staff').insert(rows);
   if (error) console.error('attachStaffToVisit error:', error);
 }
+
+export interface TrainedStaffEntry {
+  staff_id: string;
+  products: string;
+}
+
+export async function attachTrainedStaffToVisit(
+  visitId: string,
+  entries: TrainedStaffEntry[],
+): Promise<void> {
+  if (entries.length === 0) return;
+
+  // Delete any existing visit_staff rows for this visit (idempotent re-run safety)
+  await supabase.from('visit_staff').delete().eq('visit_id', visitId);
+
+  const rows = entries.map((e) => ({
+    visit_id: visitId,
+    staff_id: e.staff_id,
+    was_trained: true,
+    products_trained_on: e.products,
+  }));
+  const { error } = await supabase.from('visit_staff').insert(rows);
+  if (error) console.error('attachTrainedStaffToVisit error:', error);
+}

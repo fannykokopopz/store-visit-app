@@ -50,6 +50,12 @@ interface FilterOptions {
   canFilterCM: boolean;
 }
 
+interface TrainingStats {
+  staff_trained_count: number;
+  visits_with_training: number;
+  recent: { staff_name: string; products: string; visit_date: string; store_name: string }[];
+}
+
 interface Portfolio {
   cm: { name: string; market: string; nickname: string | null };
   stores: PortfolioStore[];
@@ -164,6 +170,10 @@ function PortfolioContent() {
   const [nickSaving, setNickSaving] = useState(false);
   const [nickSaved, setNickSaved] = useState(false);
 
+  // Training stats (this calendar month)
+  const [training, setTraining] = useState<TrainingStats | null>(null);
+  const [trainingOpen, setTrainingOpen] = useState(false);
+
   const router = useRouter();
 
   // Bootstrap
@@ -202,6 +212,21 @@ function PortfolioContent() {
       .then((j) => setAllStores(j.stores ?? []))
       .catch(() => setAllStores([]));
   }, [tab, allStores, initData]);
+
+  // Training stats for the current calendar month
+  useEffect(() => {
+    if (!initData || training !== null) return;
+    const now = new Date();
+    const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    fetch(`/api/m/stats/training?from=${from}`, { headers: { Authorization: `tma ${initData}` } })
+      .then((r) => r.json())
+      .then((j) => setTraining({
+        staff_trained_count: j.staff_trained_count ?? 0,
+        visits_with_training: j.visits_with_training ?? 0,
+        recent: j.recent ?? [],
+      }))
+      .catch(() => setTraining({ staff_trained_count: 0, visits_with_training: 0, recent: [] }));
+  }, [initData, training]);
 
   const hasAnyFilter =
     sectionFilters.length > 0 || !!fromDate || !!toDate || !!storeFilter || !!cmFilter;
@@ -367,6 +392,36 @@ function PortfolioContent() {
         {/* My Stores tab */}
         {tab === "my" && (
           <>
+            {training && (training.staff_trained_count > 0 || training.visits_with_training > 0) && (
+              <div className="mx-3.5 mt-3 rounded-2xl border border-[var(--color-section-teal-border)] bg-[var(--color-section-teal-bg)] p-3.5">
+                <button
+                  onClick={() => setTrainingOpen((v) => !v)}
+                  className="w-full text-left flex items-center justify-between"
+                >
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-section-teal-fg)] mb-0.5">
+                      🎓 Training this month
+                    </p>
+                    <p className="text-sm font-bold text-ink-700">
+                      {training.staff_trained_count} staff · {training.visits_with_training} visits
+                    </p>
+                  </div>
+                  <span className="text-ink-300 text-lg">{trainingOpen ? "▴" : "▾"}</span>
+                </button>
+                {trainingOpen && training.recent.length > 0 && (
+                  <ul className="mt-3 space-y-1.5 max-h-64 overflow-y-auto">
+                    {training.recent.map((r, i) => (
+                      <li key={i} className="rounded-lg bg-white/60 px-2.5 py-2">
+                        <p className="text-[12px] font-bold text-ink-700">{r.staff_name}</p>
+                        <p className="text-[11px] text-ink-400 truncate">{r.products}</p>
+                        <p className="text-[10px] text-ink-300 mt-0.5">{r.store_name}{r.visit_date ? ` · ${r.visit_date}` : ""}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
             {!dismissed && (
               <div className="mx-3.5 mt-3 rounded-2xl border border-[var(--color-tc-100)] bg-[var(--color-tc-50)] p-3.5">
                 <div className="flex gap-3 items-start">
