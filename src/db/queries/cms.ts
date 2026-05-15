@@ -8,6 +8,13 @@ export interface CM {
   market: 'SG' | 'TH' | 'MY' | 'HK';
   am_telegram_id: number | null;
   is_active: boolean;
+  pending_request_at: string | null;
+}
+
+export interface PendingCM {
+  telegram_id: number;
+  full_name: string;
+  pending_request_at: string;
 }
 
 export async function getCMByTelegramId(telegramId: number): Promise<CM | null> {
@@ -76,6 +83,93 @@ export async function deactivateCM(telegramId: number): Promise<boolean> {
     return false;
   }
   return true;
+}
+
+export async function getCMRecord(telegramId: number): Promise<CM | null> {
+  // Returns the row regardless of is_active — used for join-request lookups.
+  const { data, error } = await supabase
+    .from('cms')
+    .select('*')
+    .eq('telegram_id', telegramId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data as CM;
+}
+
+export async function createPendingCM(data: {
+  telegram_id: number;
+  full_name: string;
+}): Promise<boolean> {
+  // Use a default market (SG) — admin will overwrite on approval. The check
+  // constraint requires a non-null value, so we can't leave it null.
+  const { error } = await supabase
+    .from('cms')
+    .upsert(
+      {
+        telegram_id: data.telegram_id,
+        full_name: data.full_name,
+        role: 'cm',
+        market: 'SG',
+        is_active: false,
+        pending_request_at: new Date().toISOString(),
+      },
+      { onConflict: 'telegram_id' },
+    );
+  if (error) {
+    console.error('createPendingCM error:', error);
+    return false;
+  }
+  return true;
+}
+
+export async function approvePendingCM(
+  telegramId: number,
+  market: CM['market'],
+  role: CM['role'] = 'cm',
+): Promise<CM | null> {
+  const { data, error } = await supabase
+    .from('cms')
+    .update({
+      is_active: true,
+      market,
+      role,
+      pending_request_at: null,
+    })
+    .eq('telegram_id', telegramId)
+    .select()
+    .single();
+  if (error) {
+    console.error('approvePendingCM error:', error);
+    return null;
+  }
+  return data as CM;
+}
+
+export async function rejectPendingCM(telegramId: number): Promise<boolean> {
+  // Only delete rows that are still pending — never wipe an active CM.
+  const { error } = await supabase
+    .from('cms')
+    .delete()
+    .eq('telegram_id', telegramId)
+    .eq('is_active', false)
+    .not('pending_request_at', 'is', null);
+  if (error) {
+    console.error('rejectPendingCM error:', error);
+    return false;
+  }
+  return true;
+}
+
+export async function getPendingCMs(): Promise<PendingCM[]> {
+  const { data, error } = await supabase
+    .from('cms')
+    .select('telegram_id, full_name, pending_request_at')
+    .eq('is_active', false)
+    .not('pending_request_at', 'is', null)
+    .order('pending_request_at', { ascending: false });
+  if (error || !data) return [];
+  return data as PendingCM[];
 }
 
 export async function assignStoreToCM(

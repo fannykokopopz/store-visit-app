@@ -13,9 +13,11 @@ import { handleRevokeAccess } from './commands/admin/revoke.js';
 import { handleListAccess } from './commands/admin/list.js';
 import { handleDashboard } from './commands/dashboard.js';
 import { visitFlow } from './conversations/visit-flow.js';
+import { joinRequestFlow } from './conversations/join-request.js';
 import { initPhotoCollection, isCollecting, handleIncomingPhoto } from './photo-collection.js';
 import { startEditSession, isEditing, getEditSession, clearEditSession } from './edit-session.js';
 import { getVisitInfo, updateVisitSections, deleteVisit } from '../db/queries/visits.js';
+import { approvePendingCM, rejectPendingCM, getCMRecord, type CM } from '../db/queries/cms.js';
 import { parseTemplate, filledCount } from '../utils/parse-template.js';
 import { sendVisitDetails } from './visit-details.js';
 
@@ -28,6 +30,7 @@ export function createBot(): Bot<BotContext> {
   bot.use(authMiddleware);
 
   bot.use(createConversation(visitFlow));
+  bot.use(createConversation(joinRequestFlow));
 
   bot.command('start', handleStart);
   bot.command('help', handleHelp);
@@ -175,6 +178,102 @@ export function createBot(): Bot<BotContext> {
   bot.callbackQuery('cancel_action', async (ctx) => {
     await ctx.answerCallbackQuery('Cancelled.');
     await ctx.deleteMessage().catch(() => {});
+  });
+
+  // ── Join request flow ─────────────────────────────────────────────────────
+
+  bot.callbackQuery('join:request', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+    if (ctx.user) {
+      await ctx.reply("You're already in 👍 Use /start to see your commands.");
+      return;
+    }
+    await ctx.conversation.enter('joinRequestFlow');
+  });
+
+  bot.callbackQuery('join:later', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+    await ctx.reply("All good — message me /start whenever you're ready 👋");
+  });
+
+  function canApprove(user: CM | undefined): boolean {
+    return !!user && (user.role === 'admin' || user.role === 'am' || user.role === 'cmic');
+  }
+
+  bot.callbackQuery(/^join:approve:(\d+):(SG|MY|HK|TH)$/, async (ctx) => {
+    if (!canApprove(ctx.user)) {
+      await ctx.answerCallbackQuery({ text: 'Only managers can approve.', show_alert: true });
+      return;
+    }
+    const m = ctx.callbackQuery.data.match(/^join:approve:(\d+):(SG|MY|HK|TH)$/)!;
+    const targetId = parseInt(m[1], 10);
+    const market = m[2] as CM['market'];
+
+    const existing = await getCMRecord(targetId);
+    if (!existing) {
+      await ctx.answerCallbackQuery({ text: 'Request not found.', show_alert: true });
+      await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+      return;
+    }
+    if (existing.is_active) {
+      await ctx.answerCallbackQuery({ text: 'Already active.', show_alert: true });
+      await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+      return;
+    }
+
+    const approved = await approvePendingCM(targetId, market);
+    if (!approved) {
+      await ctx.answerCallbackQuery({ text: 'Failed to approve.', show_alert: true });
+      return;
+    }
+
+    await ctx.answerCallbackQuery(`Approved as cm · ${market}`);
+    const approverName = ctx.user?.nickname ?? ctx.user?.full_name ?? 'a manager';
+    const original = ctx.callbackQuery.message?.text ?? '';
+    await ctx.editMessageText(`${original}\n\n✅ Approved as cm · ${market} by ${approverName}`).catch(() => {});
+
+    await ctx.api.sendMessage(
+      targetId,
+      `🎉 You're in! Welcome to the SVA bot.\n\n` +
+      `You've been added as *cm · ${market}*.\n\n` +
+      `Type /start to see your commands.`,
+      { parse_mode: 'Markdown' },
+    ).catch((err) => console.error('[join] failed to DM approved user:', err));
+  });
+
+  bot.callbackQuery(/^join:reject:(\d+)$/, async (ctx) => {
+    if (!canApprove(ctx.user)) {
+      await ctx.answerCallbackQuery({ text: 'Only managers can reject.', show_alert: true });
+      return;
+    }
+    const m = ctx.callbackQuery.data.match(/^join:reject:(\d+)$/)!;
+    const targetId = parseInt(m[1], 10);
+
+    const existing = await getCMRecord(targetId);
+    if (!existing || existing.is_active) {
+      await ctx.answerCallbackQuery({ text: 'Not pending.', show_alert: true });
+      await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+      return;
+    }
+
+    const ok = await rejectPendingCM(targetId);
+    if (!ok) {
+      await ctx.answerCallbackQuery({ text: 'Failed to reject.', show_alert: true });
+      return;
+    }
+
+    await ctx.answerCallbackQuery('Rejected');
+    const rejecterName = ctx.user?.nickname ?? ctx.user?.full_name ?? 'a manager';
+    const original = ctx.callbackQuery.message?.text ?? '';
+    await ctx.editMessageText(`${original}\n\n❌ Rejected by ${rejecterName}`).catch(() => {});
+
+    // Optional courtesy DM. Silent if user blocked the bot.
+    await ctx.api.sendMessage(
+      targetId,
+      `Your request to join wasn't approved this time. If you think this was a mistake, please reach out to your manager directly.`,
+    ).catch(() => {});
   });
 
   // Admin commands

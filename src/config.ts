@@ -40,4 +40,8 @@ export const config = {
     chatId: optional('BROADCAST_CHAT_ID'),
     botUsername: optional('TELEGRAM_BOT_USERNAME'),
   },
+  joinRequests: {
+    // Falls back to BROADCAST_CHAT_ID if not set.
+    chatId: optional('JOIN_REQUEST_CHAT_ID') || optional('BROADCAST_CHAT_ID'),
+  },
 } as const;

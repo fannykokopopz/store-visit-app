@@ -1,12 +1,30 @@
+import { InlineKeyboard } from 'grammy';
 import { BotContext } from '../middleware/auth.js';
+import { getCMRecord } from '../../db/queries/cms.js';
 
 export async function handleStart(ctx: BotContext): Promise<void> {
   const name = ctx.user?.nickname ?? ctx.user?.full_name?.split(' ')[0] ?? ctx.from?.first_name ?? 'there';
 
   if (!ctx.user) {
+    const telegramId = ctx.from?.id;
+    const existing = telegramId ? await getCMRecord(telegramId) : null;
+
+    if (existing && existing.pending_request_at && !existing.is_active) {
+      await ctx.reply(
+        `Hey ${existing.full_name.split(' ')[0]} 👋\n\n` +
+        `Your request to join is pending — your manager will approve it soon. We'll ping you here when it's done.`,
+      );
+      return;
+    }
+
     await ctx.reply(
       `Hey ${name}! 👋\n\n` +
-      `⚠️ You're not set up yet — ask your manager to add you to the bot.`,
+      `You're not registered yet. Would you like to request access?`,
+      {
+        reply_markup: new InlineKeyboard()
+          .text('Request access', 'join:request')
+          .text('Maybe later', 'join:later'),
+      },
     );
     return;
   }
