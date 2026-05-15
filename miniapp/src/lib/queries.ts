@@ -53,6 +53,12 @@ export interface SearchResult {
   training: string | null;
 }
 
+export interface VisitTrainedStaff {
+  staff_id: string;
+  name: string;
+  products: string | null;
+}
+
 export interface FullVisit extends VisitSummary {
   store_id: string;
   store_name: string;
@@ -64,6 +70,7 @@ export interface FullVisit extends VisitSummary {
   grade: 1 | 2 | 3 | null;
   grade_comments: string | null;
   cms: { telegram_id: number; name: string; role: 'lead' | 'co' }[];
+  trained_staff: VisitTrainedStaff[];
   viewer_is_lead: boolean;
 }
 
@@ -458,6 +465,21 @@ export async function getFullVisitForCM(
 
   const viewerIsLead = cms.find((c) => c.role === 'lead')?.telegram_id === telegramId;
 
+  const { data: vsRows } = await supabase
+    .from("visit_staff")
+    .select("staff_id, products_trained_on, was_trained, staff(name)")
+    .eq("visit_id", visitId)
+    .eq("was_trained", true);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const trainedStaff: VisitTrainedStaff[] = ((vsRows ?? []) as any[])
+    .map((r) => ({
+      staff_id: r.staff_id as string,
+      name: (r.staff?.name as string | null) ?? "Unknown",
+      products: (r.products_trained_on as string | null) ?? null,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return {
     id: v.id,
     visit_date: v.visit_date,
@@ -479,8 +501,27 @@ export async function getFullVisitForCM(
     grade: v.grade ?? null,
     grade_comments: v.grade_comments ?? null,
     cms,
+    trained_staff: trainedStaff,
     viewer_is_lead: viewerIsLead,
   };
+}
+
+export async function updateVisitStaffProducts(
+  visitId: string,
+  updates: Array<{ staff_id: string; products: string | null }>,
+): Promise<boolean> {
+  for (const u of updates) {
+    const { error } = await supabase
+      .from("visit_staff")
+      .update({ products_trained_on: u.products && u.products.trim() ? u.products.trim() : null })
+      .eq("visit_id", visitId)
+      .eq("staff_id", u.staff_id);
+    if (error) {
+      console.error("updateVisitStaffProducts error:", error);
+      return false;
+    }
+  }
+  return true;
 }
 
 export async function updateVisitText(

@@ -1,7 +1,6 @@
-import { Api, InlineKeyboard } from 'grammy';
+import { Api } from 'grammy';
 import { uploadVisitPhoto } from '../db/queries/photos.js';
 import { config } from '../config.js';
-import { broadcastVisitLocked } from '../notifications/visit-broadcast.js';
 
 interface PhotoCollection {
   visitId: string;
@@ -77,39 +76,15 @@ async function finalizeCollection(telegramId: number): Promise<void> {
     return;
   }
 
-  let uploaded = 0;
   for (const fileId of collection.fileIds) {
     try {
       const file = await botApi.getFile(fileId);
       const url = `https://api.telegram.org/file/bot${config.telegram.botToken}/${file.file_path}`;
       const resp = await fetch(url);
       const buffer = Buffer.from(await resp.arrayBuffer());
-      const result = await uploadVisitPhoto(collection.visitId, buffer, collection.storeId);
-      if (result) uploaded++;
+      await uploadVisitPhoto(collection.visitId, buffer, collection.storeId);
     } catch (err) {
       console.error('[photos] upload error:', err);
     }
   }
-
-  const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  const meta: string[] = [`📅 ${date}`, `📝 ${collection.sections}/6 sections`];
-  if (uploaded > 0) meta.push(`📸 ${uploaded} photo${uploaded === 1 ? '' : 's'}`);
-
-  const text =
-    `🏪 *${collection.storeName}*\n` +
-    `${meta.join('  ·  ')}\n\n` +
-    `_Looks good? Confirm to lock it in — or edit if something's off._`;
-
-  await botApi.sendMessage(telegramId, text, {
-    parse_mode: 'Markdown',
-    reply_markup: new InlineKeyboard()
-      .text('✅ Confirm', `confirm_visit:${collection.visitId}`).row()
-      .text('✏️ Edit', `edit:${collection.visitId}`)
-      .text('🗑️ Delete', `delete:${collection.visitId}`),
-  });
-
-  // Broadcast to the group chat — fires after photos are uploaded so the
-  // deep-linked visit detail page renders with photos already in place.
-  // Failure here must not affect the visit — broadcast helper handles its own errors.
-  await broadcastVisitLocked(collection.visitId, botApi);
 }

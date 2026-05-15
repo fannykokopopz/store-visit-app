@@ -12,6 +12,12 @@ interface VisitCM {
   name: string;
 }
 
+interface TrainedStaff {
+  staff_id: string;
+  name: string;
+  products: string | null;
+}
+
 interface FullVisit {
   id: string;
   store_id: string;
@@ -29,6 +35,7 @@ interface FullVisit {
   grade: 1 | 2 | 3 | null;
   grade_comments: string | null;
   cms: VisitCM[];
+  trained_staff: TrainedStaff[];
   viewer_is_lead: boolean;
 }
 
@@ -42,6 +49,7 @@ interface VisitPayload {
   visit: FullVisit;
   photoUrls: string[];
   canEditCoCMs: boolean;
+  canEditTraining: boolean;
 }
 
 interface MarketCM { telegram_id: number; name: string }
@@ -121,6 +129,9 @@ export default function VisitPage({
   const [marketCMs, setMarketCMs] = useState<MarketCM[] | null>(null);
   const [pendingCoIds, setPendingCoIds] = useState<Set<number>>(new Set());
   const [savingCMs, setSavingCMs] = useState(false);
+  const [editingTraining, setEditingTraining] = useState(false);
+  const [trainingDrafts, setTrainingDrafts] = useState<Record<string, string>>({});
+  const [savingTraining, setSavingTraining] = useState(false);
   useSwipeBack();
 
   useEffect(() => {
@@ -180,6 +191,37 @@ export default function VisitPage({
     }
   }
 
+  function openTrainingEditor() {
+    if (!data) return;
+    const drafts: Record<string, string> = {};
+    for (const s of data.visit.trained_staff) drafts[s.staff_id] = s.products ?? "";
+    setTrainingDrafts(drafts);
+    setEditingTraining(true);
+  }
+
+  async function saveTraining() {
+    if (!initData || !data) return;
+    setSavingTraining(true);
+    try {
+      const updates = data.visit.trained_staff.map((s) => ({
+        staff_id: s.staff_id,
+        products: trainingDrafts[s.staff_id] ?? "",
+      }));
+      const res = await fetch(`/api/m/visit/${id}/training`, {
+        method: "PATCH",
+        headers: { Authorization: `tma ${initData}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ updates }),
+      });
+      if (res.ok) {
+        const fresh = await fetch(`/api/m/visit/${id}`, { headers: { Authorization: `tma ${initData}` } });
+        if (fresh.ok) setData(await fresh.json());
+        setEditingTraining(false);
+      }
+    } finally {
+      setSavingTraining(false);
+    }
+  }
+
   if (error) {
     return (
       <main className="flex min-h-screen items-center justify-center p-6">
@@ -195,10 +237,11 @@ export default function VisitPage({
     );
   }
 
-  const { visit, photoUrls, canEditCoCMs } = data;
+  const { visit, photoUrls, canEditCoCMs, canEditTraining } = data;
   const filled = SECTIONS.filter((s) => visit[s.key]);
   const lead = visit.cms.find((c) => c.role === 'lead');
   const cos = visit.cms.filter((c) => c.role === 'co');
+  const trainedStaff = visit.trained_staff ?? [];
 
   return (
     <main className="min-h-screen pb-12">
@@ -315,6 +358,90 @@ export default function VisitPage({
           ))
         )}
       </div>
+
+      {/* Trained Staff */}
+      {trainedStaff.length > 0 && (
+        <div className="px-3.5 mt-2">
+          <div className="rounded-[18px] border border-[var(--color-section-teal-border)] bg-[var(--color-section-teal-bg)] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/60 text-sm">
+                  🎓
+                </span>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--color-section-teal-fg)]">
+                  Trained Staff
+                </span>
+              </div>
+              {canEditTraining && (
+                <button
+                  onClick={openTrainingEditor}
+                  className="rounded-full bg-white/60 px-2.5 py-0.5 text-[11px] font-bold text-[var(--color-section-teal-fg)]"
+                >
+                  Edit details
+                </button>
+              )}
+            </div>
+            <ul className="space-y-2">
+              {trainedStaff.map((s) => (
+                <li key={s.staff_id} className="rounded-xl bg-white/50 px-3 py-2">
+                  <p className="text-[13px] font-bold text-ink-700">{s.name}</p>
+                  {s.products ? (
+                    <p className="mt-0.5 whitespace-pre-wrap text-[12px] leading-relaxed text-ink-500">{s.products}</p>
+                  ) : (
+                    <p className="mt-0.5 text-[12px] italic text-ink-300">No product details yet</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Edit training sheet */}
+      {editingTraining && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setEditingTraining(false)} />
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-xl max-h-[85vh] flex flex-col">
+            <div className="w-8 h-1 bg-ink-200 rounded-full mx-auto mb-4" />
+            <h2 className="text-base font-extrabold text-ink-700 mb-1">Training details</h2>
+            <p className="text-[11px] text-ink-300 mb-3">Add the products you trained each staff on.</p>
+
+            <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-3">
+              {trainedStaff.map((s) => (
+                <div key={s.staff_id}>
+                  <label className="text-[11px] font-bold text-ink-500 mb-1 block">{s.name}</label>
+                  <textarea
+                    value={trainingDrafts[s.staff_id] ?? ""}
+                    onChange={(e) =>
+                      setTrainingDrafts((curr) => ({ ...curr, [s.staff_id]: e.target.value }))
+                    }
+                    placeholder="e.g. Klipsch RP-600M, SVS PB-1000"
+                    rows={2}
+                    className="w-full resize-none rounded-xl border border-ink-100 bg-ink-50 px-3 py-2 text-[13px] text-ink-700 placeholder:text-ink-300 focus:bg-white focus:border-[var(--color-tc-200)] focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setEditingTraining(false)}
+                className="flex-1 rounded-xl py-3 text-sm font-bold bg-ink-100 text-ink-500"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveTraining}
+                disabled={savingTraining}
+                className="flex-1 rounded-xl py-3 text-sm font-bold text-white disabled:opacity-50"
+                style={{ background: "var(--color-tc-600)" }}
+              >
+                {savingTraining ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Edit co-CMs sheet */}
       {editingCMs && (

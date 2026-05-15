@@ -3,16 +3,23 @@ import { InlineKeyboard } from 'grammy';
 import { BotContext } from '../middleware/auth.js';
 import { getStoresForCM } from '../../db/queries/stores.js';
 import { searchStoresByName, getStoreById } from '../../db/queries/stores.js';
-import { createVisit, lockVisit, attachVisitSections, getLastVisitDatePerStore } from '../../db/queries/visits.js';
+import {
+  createVisit,
+  lockVisit,
+  attachVisitSections,
+  setVisitGrade,
+  getLastVisitDatePerStore,
+} from '../../db/queries/visits.js';
 import { setVisitCMs } from '../../db/queries/visit-cms.js';
-import { getAllCMs, type CM } from '../../db/queries/cms.js';
 import { getStaffForStore, createStaff, attachTrainedStaffToVisit, type Staff } from '../../db/queries/staff.js';
 import { getActivePlan, consumePlan } from '../../db/queries/visit-plans.js';
 import { buildStorePicker, buildSearchResultsPicker, buildStoreContextMessage } from '../keyboards/store-picker.js';
 import { buildTemplateMessage } from '../../utils/template.js';
 import { parseTemplate, filledCount } from '../../utils/parse-template.js';
-import { startPhotoCollection } from '../photo-collection.js';
+import { startPhotoCollection, handleIncomingPhoto } from '../photo-collection.js';
 import { sendVisitDetails } from '../visit-details.js';
+import { broadcastVisitLocked } from '../../notifications/visit-broadcast.js';
+import { config } from '../../config.js';
 
 function buildStaffPicker(staff: Staff[], selected: Set<string>): InlineKeyboard {
   const kb = new InlineKeyboard();
@@ -31,20 +38,15 @@ function buildStaffPicker(staff: Staff[], selected: Set<string>): InlineKeyboard
   return kb;
 }
 
-function buildCoCMPicker(cms: CM[], selected: Set<number>): InlineKeyboard {
+function buildDoneKeyboard(visitId: string): InlineKeyboard {
   const kb = new InlineKeyboard();
-  for (let i = 0; i < cms.length; i += 2) {
-    const a = cms[i];
-    const labelA = `${selected.has(a.telegram_id) ? '✓ ' : ''}${a.nickname ?? a.full_name}`;
-    kb.text(labelA, `coCM:${a.telegram_id}`);
-    if (i + 1 < cms.length) {
-      const b = cms[i + 1];
-      const labelB = `${selected.has(b.telegram_id) ? '✓ ' : ''}${b.nickname ?? b.full_name}`;
-      kb.text(labelB, `coCM:${b.telegram_id}`);
-    }
-    kb.row();
+  if (config.broadcast.botUsername) {
+    const deepLink =
+      `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}` +
+      `?startapp=visit_${visitId}`;
+    kb.url('🔍 Open in mini-app', deepLink).row();
   }
-  kb.text('✅ Done', 'coCM:done').text('Solo visit', 'coCM:solo');
+  kb.text('✏️ Edit', `edit:${visitId}`).text('🗑️ Delete', `delete:${visitId}`);
   return kb;
 }
 
@@ -54,7 +56,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   const telegramId = ctx.from?.id;
   if (!telegramId) return;
 
-  // ── Step 1: Store selection ────────────────────────────────────────────────
+  // ── Store pick (entry) ─────────────────────────────────────────────────────
 
   const [stores, lastVisits] = await conversation.external(async () => {
     const s = await getStoresForCM(telegramId);
@@ -67,20 +69,20 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     return;
   }
 
-  // Show context message with last-visit info, then picker with clean button labels
-  await ctx.reply(buildStoreContextMessage(stores, lastVisits));
-
+  // Merged: store context + "which store?" in one message
   let page = 0;
-  await ctx.reply('Which store did you visit?', {
-    reply_markup: buildStorePicker(stores, lastVisits, page),
-  });
+  await ctx.reply(
+    `${buildStoreContextMessage(stores, lastVisits)}\n\nWhich store did you visit?\n_/cancel to stop_`,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: buildStorePicker(stores, lastVisits, page),
+    },
+  );
 
   let storeId = '';
   let storeName = '';
 
   storeLoop: while (true) {
-    // Use conversation.wait() instead of waitForCallbackQuery so that a typed
-    // /cancel still exits even if the picker message was deleted.
     const update = await conversation.wait();
 
     if (update.message?.text === '/cancel') {
@@ -98,7 +100,6 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       return;
     }
 
-    // Pagination — re-render the same picker message with a new page
     if (data.startsWith('page:')) {
       page = parseInt(data.replace('page:', ''), 10);
       await update.answerCallbackQuery();
@@ -190,99 +191,22 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
   const plan = await conversation.external(() => getActivePlan(telegramId, storeId));
 
-  // ── Step 1b: Co-CM picker ─────────────────────────────────────────────────
-  // Y/N gate first — most visits are solo. Skip silently if no other CMs in market.
+  // ── Step 1/3: Notes (template + paste) ─────────────────────────────────────
 
-  const market = ctx.user?.market ?? 'SG';
-  const marketCMs = await conversation.external(() => getAllCMs(market));
-  const pickableCMs = marketCMs.filter((c) => c.telegram_id !== telegramId);
-
-  const coCMIds = new Set<number>();
-
-  if (pickableCMs.length > 0) {
-    await ctx.reply("Anyone visiting with you today?", {
-      reply_markup: new InlineKeyboard()
-        .text('Solo visit', 'coCM:solo')
-        .text('Tag co-CMs', 'coCM:start'),
-    });
-
-    let pickerOpen = false;
-    let pickerMsgChatId: number | null = null;
-    let pickerMsgId: number | null = null;
-
-    coCMLoop: while (true) {
-      const upd = await conversation.wait();
-
-      if (upd.message?.text === '/cancel') {
-        await ctx.reply("No worries — come back whenever you're ready 👋");
-        return;
-      }
-      if (!upd.callbackQuery) continue;
-
-      const data = upd.callbackQuery.data ?? '';
-
-      if (!pickerOpen && data === 'coCM:solo') {
-        await upd.answerCallbackQuery('Solo');
-        break coCMLoop;
-      }
-      if (!pickerOpen && data === 'coCM:start') {
-        await upd.answerCallbackQuery();
-        const pickerMsg = await ctx.reply(
-          "Tap names to tag co-CMs, then ✅ Done.",
-          { reply_markup: buildCoCMPicker(pickableCMs, coCMIds) },
-        );
-        pickerMsgChatId = pickerMsg.chat.id;
-        pickerMsgId = pickerMsg.message_id;
-        pickerOpen = true;
-        continue;
-      }
-
-      if (pickerOpen && (data === 'coCM:done' || data === 'coCM:solo')) {
-        if (data === 'coCM:solo') coCMIds.clear();
-        await upd.answerCallbackQuery(data === 'coCM:solo' ? 'Solo' : `Tagged ${coCMIds.size}`);
-        break coCMLoop;
-      }
-
-      const m = data.match(/^coCM:(\d+)$/);
-      if (pickerOpen && m) {
-        const id = Number(m[1]);
-        if (coCMIds.has(id)) coCMIds.delete(id);
-        else coCMIds.add(id);
-        await upd.answerCallbackQuery();
-        if (pickerMsgChatId !== null && pickerMsgId !== null) {
-          await ctx.api.editMessageReplyMarkup(pickerMsgChatId, pickerMsgId, {
-            reply_markup: buildCoCMPicker(pickableCMs, coCMIds),
-          }).catch(() => {});
-        }
-        continue;
-      }
-
-      await upd.answerCallbackQuery().catch(() => {});
-    }
-  }
-
-  // ── Step 2: Template ───────────────────────────────────────────────────────
-
-  await ctx.reply(buildTemplateMessage(storeName), { parse_mode: 'MarkdownV2' });
   await ctx.reply(
-    'Copy the template above, fill it in, and send it back\\. You can attach photos to the same message 📸\n/cancel to stop\\.',
+    `📝 *Step 1 of 3 — Notes*\n\n` + buildTemplateMessage(storeName),
     { parse_mode: 'MarkdownV2' },
   );
 
-  // ── Step 3: Collect template text ─────────────────────────────────────────
-  // Photos attached here are handled by the debounce handler after the
-  // conversation exits — don't try to collect them inside the conversation.
-
-  let templateText: string | null = null;
-  // Buffer photos that arrive during this conversation — they all get passed
-  // to startPhotoCollection after the visit is created.
+  // Buffer photos that arrive during template step. Once we start photo
+  // collection (after createVisit), new photos forward straight to it.
   const albumPhotoFileIds: string[] = [];
+  let templateText: string | null = null;
 
   while (true) {
     const msg = await conversation.wait();
 
     // Handle "View full last visit" / "View visit" inline.
-    // Global bot.callbackQuery handlers don't fire while a conversation is active.
     if (msg.callbackQuery) {
       const data = msg.callbackQuery.data ?? '';
       if (data.startsWith('viewlast:') || data.startsWith('viewvisit:')) {
@@ -302,7 +226,6 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
     const text = msg.message?.caption ?? msg.message?.text ?? null;
     if (!text) {
-      // Album photo without caption — buffer and keep waiting for the template text.
       if (msg.message?.photo) {
         const p = msg.message.photo;
         if (albumPhotoFileIds.length < 6) {
@@ -314,7 +237,6 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       continue;
     }
 
-    // Capture photo 1 if template was sent as an album caption
     if (msg.message?.photo) {
       const p = msg.message.photo;
       if (albumPhotoFileIds.length < 6) {
@@ -329,16 +251,42 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   const sections = parseTemplate(templateText);
   const filled = filledCount(sections);
 
-  // ── Step 4: Grade picker (1–3) ────────────────────────────────────────────
+  // ── Create visit early so photos can upload during the rest of the flow ───
 
-  await ctx.reply(
-    `📊 How would you grade this store today?\n\n` +
-    `1️⃣ Grade 1 — Great store hitting all 3 areas\n` +
-    `(Allies / Displays on brand / Sales)\n\n` +
-    `2️⃣ Grade 2 — Good store hitting 2 areas\n` +
-    `(Allies / Displays on brand / Sales)\n\n` +
-    `3️⃣ Grade 3 — Not-so-good store / store you really want to improve on`,
+  const visit = await conversation.external(async () => {
+    const v = await createVisit({
+      store_id: storeId,
+      cm_telegram_id: telegramId,
+      grade: null,
+      grade_comments: null,
+    });
+    if (!v) return null;
+    await attachVisitSections(v.id, sections);
+    await setVisitCMs(v.id, telegramId, []);
+    return v;
+  });
+
+  if (!visit) {
+    await ctx.reply("Something went wrong — give /visit another try 🙏");
+    return;
+  }
+
+  // Kick off photo upload in parallel. Stragglers arriving via
+  // bot.on('message:photo') after the conversation exits land here too.
+  await conversation.external(() => {
+    startPhotoCollection(telegramId, visit.id, storeId, storeName, filled, albumPhotoFileIds);
+  });
+
+  // ── Step 2/3: Grade (tap → edit msg to ask for comment) ───────────────────
+
+  const gradeMsg = await ctx.reply(
+    `📊 *Step 2 of 3 — Grade this store*\n\n` +
+    `1️⃣ Great store — hitting all 3 areas\n` +
+    `   _(Allies / Displays / Sales)_\n\n` +
+    `2️⃣ Good store — hitting 2 areas\n\n` +
+    `3️⃣ Needs improvement`,
     {
+      parse_mode: 'Markdown',
       reply_markup: new InlineKeyboard()
         .text('1', 'grade:1')
         .text('2', 'grade:2')
@@ -355,12 +303,10 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       return;
     }
 
-    // Buffer album photos that arrive while we're waiting
     if (upd.message?.photo) {
       const p = upd.message.photo;
-      if (albumPhotoFileIds.length < 6) {
-        albumPhotoFileIds.push(p[p.length - 1].file_id);
-      }
+      const fileId = p[p.length - 1].file_id;
+      await conversation.external(() => handleIncomingPhoto(telegramId, fileId));
       continue;
     }
 
@@ -381,11 +327,16 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
   }
 
-  // ── Step 5: Comments prompt ───────────────────────────────────────────────
-
-  await ctx.reply('Any comments on this grade?', {
-    reply_markup: new InlineKeyboard().text('Skip', 'grade:skip-comments'),
-  });
+  // Edit the grade message in-place to show the chosen grade + comment prompt
+  await ctx.api.editMessageText(
+    gradeMsg.chat.id,
+    gradeMsg.message_id,
+    `📊 *Grade ${grade} ✓*\n\nAny comments on this grade? Type them, or tap Skip.`,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: new InlineKeyboard().text('Skip', 'grade:skip-comments'),
+    },
+  ).catch(() => {});
 
   let gradeComments: string | null = null;
   let commentsDone = false;
@@ -399,9 +350,8 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
     if (upd.message?.photo) {
       const p = upd.message.photo;
-      if (albumPhotoFileIds.length < 6) {
-        albumPhotoFileIds.push(p[p.length - 1].file_id);
-      }
+      const fileId = p[p.length - 1].file_id;
+      await conversation.external(() => handleIncomingPhoto(telegramId, fileId));
       continue;
     }
 
@@ -423,14 +373,18 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
   }
 
-  // ── Step 5b: Staff training ───────────────────────────────────────────────
+  // ── Step 3/3: Training (tag staff only — products go in mini-app) ─────────
 
-  type TrainedEntry = { staff_id: string; products: string };
-  const trainedEntries: TrainedEntry[] = [];
+  const trainedStaffIds: string[] = [];
 
-  await ctx.reply('Did you train any staff today?', {
-    reply_markup: new InlineKeyboard().text('Yes', 'training:yes').text('No', 'training:no'),
-  });
+  await ctx.reply(
+    `🎓 *Step 3 of 3 — Train anyone today?*\n\n` +
+    `Tag who you trained. Add product details in the mini-app after.`,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: new InlineKeyboard().text('Yes', 'training:yes').text('Skip', 'training:no'),
+    },
+  );
 
   let trainingChoice: 'yes' | 'no' | null = null;
   while (trainingChoice === null) {
@@ -442,9 +396,8 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
     if (upd.message?.photo) {
       const p = upd.message.photo;
-      if (albumPhotoFileIds.length < 6) {
-        albumPhotoFileIds.push(p[p.length - 1].file_id);
-      }
+      const fileId = p[p.length - 1].file_id;
+      await conversation.external(() => handleIncomingPhoto(telegramId, fileId));
       continue;
     }
     if (upd.callbackQuery) {
@@ -473,9 +426,8 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       }
       if (upd.message?.photo) {
         const p = upd.message.photo;
-        if (albumPhotoFileIds.length < 6) {
-          albumPhotoFileIds.push(p[p.length - 1].file_id);
-        }
+        const fileId = p[p.length - 1].file_id;
+        await conversation.external(() => handleIncomingPhoto(telegramId, fileId));
         continue;
       }
       if (!upd.callbackQuery) continue;
@@ -526,71 +478,42 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       await upd.answerCallbackQuery().catch(() => {});
     }
 
-    // Ask product per tagged staff
-    for (const sid of tagged) {
-      const staff = staffList.find((s) => s.id === sid);
-      if (!staff) continue;
-      await ctx.reply(`What products did you train ${staff.name} on?`);
+    trainedStaffIds.push(...tagged);
+  }
 
-      while (true) {
-        const upd = await conversation.wait();
-        if (upd.message?.text === '/cancel') {
-          await ctx.reply('No worries — visit cancelled.');
-          return;
-        }
-        if (upd.message?.photo) {
-          const p = upd.message.photo;
-          if (albumPhotoFileIds.length < 6) {
-            albumPhotoFileIds.push(p[p.length - 1].file_id);
-          }
-          continue;
-        }
-        const text = upd.message?.text?.trim();
-        if (!text) continue;
-        trainedEntries.push({ staff_id: sid, products: text });
-        break;
-      }
+  // ── Finalize: grade, training, lock ────────────────────────────────────────
+
+  await conversation.external(async () => {
+    if (grade !== null) await setVisitGrade(visit.id, grade, gradeComments);
+    if (trainedStaffIds.length > 0) {
+      await attachTrainedStaffToVisit(
+        visit.id,
+        trainedStaffIds.map((staff_id) => ({ staff_id, products: '' })),
+      );
     }
-  }
+    await lockVisit(visit.id);
+    if (plan) await consumePlan(plan.id);
+    // Broadcast to group chat after lock. Photos may still be uploading; the
+    // deep-linked visit page will pick them up as their DB rows insert.
+    await broadcastVisitLocked(visit.id, ctx.api).catch(() => {});
+  });
 
-  // ── Step 6: Save and lock ─────────────────────────────────────────────────
+  // ── Unified Done message ──────────────────────────────────────────────────
 
-  const visit = await conversation.external(() =>
-    createVisit({
-      store_id: storeId,
-      cm_telegram_id: telegramId,
-      grade,
-      grade_comments: gradeComments,
-    }),
-  );
-
-  if (!visit) {
-    await ctx.reply("Something went wrong — give /visit another try 🙏");
-    return;
-  }
-
-  await conversation.external(() => attachVisitSections(visit.id, sections));
-  await conversation.external(() =>
-    setVisitCMs(visit.id, telegramId, Array.from(coCMIds)),
-  );
-  if (trainedEntries.length > 0) {
-    await conversation.external(() => attachTrainedStaffToVisit(visit.id, trainedEntries));
-  }
-  await conversation.external(() => lockVisit(visit.id));
-  if (plan) await conversation.external(() => consumePlan(plan.id));
-
-  // ── Hand off to debounce photo handler and exit ────────────────────────────
-  // Photos from the same album may still be arriving as separate Telegram updates.
-  // The conversation exits here so they reach bot.on('message:photo') cleanly.
-
-  startPhotoCollection(telegramId, visit.id, storeId, storeName, filled, albumPhotoFileIds);
-
+  const trainedLine = trainedStaffIds.length > 0
+    ? ` · ${trainedStaffIds.length} staff trained`
+    : '';
   const photoLine = albumPhotoFileIds.length > 0
-    ? `\n\n📸 Photos received — saving them in the background\\.`
+    ? `\n\n📸 _Photos saving in background_`
     : '';
 
   await ctx.reply(
-    `🎉 *Done\\! ${storeName} is logged\\.* Nice work out there${photoLine}`,
-    { parse_mode: 'MarkdownV2' },
+    `🎉 *${storeName}* logged ✓\n` +
+    `Grade ${grade}${trainedLine}` +
+    photoLine,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: buildDoneKeyboard(visit.id),
+    },
   );
 }

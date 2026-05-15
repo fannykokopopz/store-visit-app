@@ -18,7 +18,8 @@ export async function GET(
   }
   const photoUrls = await signPhotoUrls(visit.photo_paths);
   const canEditCoCMs = visit.viewer_is_lead || cm.role !== "cm";
-  return Response.json({ visit, photoUrls, canEditCoCMs });
+  const canEditTraining = visit.viewer_is_lead || cm.role !== "cm";
+  return Response.json({ visit, photoUrls, canEditCoCMs, canEditTraining });
 }
 
 export async function PATCH(
