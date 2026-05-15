@@ -107,6 +107,7 @@ export async function getRecentVisitsByCM(
     .eq('cm_telegram_id', telegramId)
     .eq('is_locked', true)
     .order('visit_date', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(limit);
 
   if (error || !data) return [];
@@ -125,6 +126,7 @@ export async function getVisitsByCMAndStore(
     .eq('store_id', storeId)
     .eq('is_locked', true)
     .order('visit_date', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(limit);
 
   if (error || !data) return [];
@@ -136,10 +138,11 @@ export async function getLastVisitDatePerStore(
 ): Promise<Record<string, string>> {
   const { data, error } = await supabase
     .from('visits')
-    .select('store_id, visit_date')
+    .select('store_id, visit_date, created_at')
     .eq('cm_telegram_id', telegramId)
     .eq('is_locked', true)
-    .order('visit_date', { ascending: false });
+    .order('visit_date', { ascending: false })
+    .order('created_at', { ascending: false });
 
   if (error || !data) return {};
 
@@ -166,6 +169,7 @@ export async function getStoreContextForCM(
       .eq('store_id', storeId)
       .eq('is_locked', true)
       .order('visit_date', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
     supabase

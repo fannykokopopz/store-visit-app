@@ -89,11 +89,12 @@ export async function getPortfolioForCM(
 
   const { data: visitRows } = await supabase
     .from("visits")
-    .select("id, store_id, visit_date")
+    .select("id, store_id, visit_date, created_at")
     .eq("cm_telegram_id", telegramId)
     .eq("is_locked", true)
     .in("store_id", storeIds)
-    .order("visit_date", { ascending: false });
+    .order("visit_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   const lastVisitByStore = new Map<string, { id: string; date: string }>();
   const count30dByStore = new Map<string, number>();
@@ -144,13 +145,15 @@ export async function getStoreTimelineForCM(
           .eq("store_id", storeId)
           .eq("is_locked", true)
           .order("visit_date", { ascending: false })
+          .order("created_at", { ascending: false })
       : supabase
           .from("visits")
           .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training")
           .eq("cm_telegram_id", telegramId)
           .eq("store_id", storeId)
           .eq("is_locked", true)
-          .order("visit_date", { ascending: false }),
+          .order("visit_date", { ascending: false })
+          .order("created_at", { ascending: false }),
   ]);
 
   const store = (storeRes.data as Store | null) ?? null;
@@ -220,10 +223,11 @@ export async function getAllStoresInMarket(market: string): Promise<AllMarketSto
   const storeIds = storeRows.map((s: any) => s.id); // eslint-disable-line @typescript-eslint/no-explicit-any
   const { data: visitRows } = await supabase
     .from("visits")
-    .select("store_id, visit_date, cms(full_name, nickname)")
+    .select("store_id, visit_date, created_at, cms(full_name, nickname)")
     .in("store_id", storeIds)
     .eq("is_locked", true)
-    .order("visit_date", { ascending: false });
+    .order("visit_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   const lastVisitByStore = new Map<string, { date: string; cm_name: string }>();
   for (const v of visitRows ?? []) {
@@ -276,6 +280,7 @@ export async function searchVisitsInMarket(
     .in("store_id", storeIds)
     .eq("is_locked", true)
     .order("visit_date", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(50);
 
   const { data: visitRows } = await (validSection
