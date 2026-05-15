@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { initTelegram } from "./telegram-init";
+import { initTelegram, getStartParam } from "./telegram-init";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -150,12 +150,23 @@ function PortfolioContent() {
   const [nickSaving, setNickSaving] = useState(false);
   const [nickSaved, setNickSaved] = useState(false);
 
+  const router = useRouter();
+
   // Bootstrap
   useEffect(() => {
     setDismissed(!!localStorage.getItem("sva-onboard-dismissed"));
     (async () => {
       const id = await initTelegram();
       if (!id) { setError("Open this from inside Telegram."); return; }
+
+      // Deep link from a group broadcast: ?startapp=visit_<uuid>
+      const startParam = getStartParam();
+      const visitMatch = startParam?.match(/^visit_([0-9a-f-]{36})$/i);
+      if (visitMatch) {
+        router.replace(`/m/visit/${visitMatch[1]}`);
+        return;
+      }
+
       setInitData(id);
       const res = await fetch("/api/m/portfolio", { headers: { Authorization: `tma ${id}` } });
       if (!res.ok) {
@@ -167,7 +178,7 @@ function PortfolioContent() {
       setData(payload);
       setNickInput(payload.cm.nickname ?? payload.cm.name.split(" ")[0]);
     })().catch((e) => setError(String(e)));
-  }, []);
+  }, [router]);
 
   // Lazy-load All Stores tab
   useEffect(() => {

@@ -3,6 +3,8 @@ import { conversations, createConversation } from '@grammyjs/conversations';
 import { config } from '../config.js';
 import { BotContext, authMiddleware, requireAuth } from './middleware/auth.js';
 import { handleStart } from './commands/start.js';
+import { handleHelp } from './commands/help.js';
+import { handleLinks } from './commands/links.js';
 import { handleNickname } from './commands/nickname.js';
 import { handleMyProfile, handleProfileStores, handleProfileVisits, handleProfileBack } from './commands/myprofile.js';
 import { handleCancel } from './commands/cancel.js';
@@ -28,6 +30,8 @@ export function createBot(): Bot<BotContext> {
   bot.use(createConversation(visitFlow));
 
   bot.command('start', handleStart);
+  bot.command('help', handleHelp);
+  bot.command('links', handleLinks);
   bot.command('nickname', handleNickname);
   bot.command('myprofile', handleMyProfile);
   bot.command('cancel', handleCancel);

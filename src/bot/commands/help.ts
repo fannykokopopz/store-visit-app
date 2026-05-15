@@ -14,6 +14,7 @@ export async function handleHelp(ctx: BotContext): Promise<void> {
     `📱 *Commands*\n\n` +
     `🏪 /visit — log a new store visit\n` +
     `📊 /dashboard — open the team dashboard\n` +
+    `🔗 /links — store objective + asset verification links\n` +
     `✏️ /nickname — set your display name\n` +
     `🚫 /cancel — stop what you're doing\n` +
     adminBlock + `\n` +

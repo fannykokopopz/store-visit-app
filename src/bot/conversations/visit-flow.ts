@@ -166,7 +166,9 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   // conversation exits — don't try to collect them inside the conversation.
 
   let templateText: string | null = null;
-  let firstPhotoFileId: string | null = null;
+  // Buffer photos that arrive during this conversation — they all get passed
+  // to startPhotoCollection after the visit is created.
+  const albumPhotoFileIds: string[] = [];
 
   while (true) {
     const msg = await conversation.wait();
@@ -192,26 +194,136 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
     const text = msg.message?.caption ?? msg.message?.text ?? null;
     if (!text) {
+      // Album photo without caption — buffer and keep waiting for the template text.
+      if (msg.message?.photo) {
+        const p = msg.message.photo;
+        if (albumPhotoFileIds.length < 6) {
+          albumPhotoFileIds.push(p[p.length - 1].file_id);
+        }
+        continue;
+      }
       await ctx.reply("Send the filled template as a text message. /cancel to stop.");
       continue;
     }
 
     // Capture photo 1 if template was sent as an album caption
     if (msg.message?.photo) {
-      firstPhotoFileId = msg.message.photo[msg.message.photo.length - 1].file_id;
+      const p = msg.message.photo;
+      if (albumPhotoFileIds.length < 6) {
+        albumPhotoFileIds.push(p[p.length - 1].file_id);
+      }
     }
 
     templateText = text;
     break;
   }
 
-  // ── Step 4: Save and lock immediately ─────────────────────────────────────
-
   const sections = parseTemplate(templateText);
   const filled = filledCount(sections);
 
+  // ── Step 4: Grade picker (1–3) ────────────────────────────────────────────
+
+  await ctx.reply(
+    `📊 How would you grade this store today?\n\n` +
+    `1️⃣ Grade 1 — Great store hitting all 3 areas\n` +
+    `(Allies / Displays on brand / Sales)\n\n` +
+    `2️⃣ Grade 2 — Good store hitting 2 areas\n` +
+    `(Allies / Displays on brand / Sales)\n\n` +
+    `3️⃣ Grade 3 — Not-so-good store / store you really want to improve on`,
+    {
+      reply_markup: new InlineKeyboard()
+        .text('1', 'grade:1')
+        .text('2', 'grade:2')
+        .text('3', 'grade:3'),
+    },
+  );
+
+  let grade: 1 | 2 | 3 | null = null;
+  while (grade === null) {
+    const upd = await conversation.wait();
+
+    if (upd.message?.text === '/cancel') {
+      await ctx.reply('No worries — visit cancelled.');
+      return;
+    }
+
+    // Buffer album photos that arrive while we're waiting
+    if (upd.message?.photo) {
+      const p = upd.message.photo;
+      if (albumPhotoFileIds.length < 6) {
+        albumPhotoFileIds.push(p[p.length - 1].file_id);
+      }
+      continue;
+    }
+
+    if (upd.callbackQuery) {
+      const data = upd.callbackQuery.data ?? '';
+      const m = data.match(/^grade:([1-3])$/);
+      if (m) {
+        grade = Number(m[1]) as 1 | 2 | 3;
+        await upd.answerCallbackQuery(`Grade ${grade} ✓`);
+      } else {
+        await upd.answerCallbackQuery().catch(() => {});
+      }
+      continue;
+    }
+
+    if (upd.message?.text) {
+      await ctx.reply('Tap a grade button: 1, 2, or 3. /cancel to stop.');
+    }
+  }
+
+  // ── Step 5: Comments prompt ───────────────────────────────────────────────
+
+  await ctx.reply('Any comments on this grade?', {
+    reply_markup: new InlineKeyboard().text('Skip', 'grade:skip-comments'),
+  });
+
+  let gradeComments: string | null = null;
+  let commentsDone = false;
+  while (!commentsDone) {
+    const upd = await conversation.wait();
+
+    if (upd.message?.text === '/cancel') {
+      await ctx.reply('No worries — visit cancelled.');
+      return;
+    }
+
+    if (upd.message?.photo) {
+      const p = upd.message.photo;
+      if (albumPhotoFileIds.length < 6) {
+        albumPhotoFileIds.push(p[p.length - 1].file_id);
+      }
+      continue;
+    }
+
+    if (upd.callbackQuery) {
+      if (upd.callbackQuery.data === 'grade:skip-comments') {
+        await upd.answerCallbackQuery('Skipped');
+        commentsDone = true;
+        break;
+      }
+      await upd.answerCallbackQuery().catch(() => {});
+      continue;
+    }
+
+    const text = upd.message?.text ?? upd.message?.caption ?? null;
+    if (text) {
+      gradeComments = text;
+      commentsDone = true;
+      break;
+    }
+  }
+
+  // ── Step 6: Save and lock ─────────────────────────────────────────────────
+
   const visit = await conversation.external(() =>
-    createVisit({ store_id: storeId, cm_telegram_id: telegramId }),
+    createVisit({
+      store_id: storeId,
+      cm_telegram_id: telegramId,
+      grade,
+      grade_comments: gradeComments,
+    }),
   );
 
   if (!visit) {
@@ -224,12 +336,12 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   if (plan) await conversation.external(() => consumePlan(plan.id));
 
   // ── Hand off to debounce photo handler and exit ────────────────────────────
-  // Photos from the same album are still arriving as separate Telegram updates.
+  // Photos from the same album may still be arriving as separate Telegram updates.
   // The conversation exits here so they reach bot.on('message:photo') cleanly.
 
-  startPhotoCollection(telegramId, visit.id, storeId, storeName, filled, firstPhotoFileId);
+  startPhotoCollection(telegramId, visit.id, storeId, storeName, filled, albumPhotoFileIds);
 
-  const photoLine = firstPhotoFileId
+  const photoLine = albumPhotoFileIds.length > 0
     ? `\n\n📸 Photos received — saving them in the background\\.`
     : '';
 

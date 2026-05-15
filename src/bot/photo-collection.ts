@@ -1,6 +1,7 @@
 import { Api, InlineKeyboard } from 'grammy';
 import { uploadVisitPhoto } from '../db/queries/photos.js';
 import { config } from '../config.js';
+import { broadcastVisitLocked } from '../notifications/visit-broadcast.js';
 
 interface PhotoCollection {
   visitId: string;
@@ -29,11 +30,20 @@ export function startPhotoCollection(
   storeId: string,
   storeName: string,
   sections: number,
-  firstPhotoFileId?: string | null,
+  initialPhotoFileIds?: readonly string[] | string | null,
 ): void {
   const existing = collections.get(telegramId);
   if (existing?.timer) clearTimeout(existing.timer);
-  const fileIds = firstPhotoFileId ? [firstPhotoFileId] : [];
+
+  let fileIds: string[];
+  if (Array.isArray(initialPhotoFileIds)) {
+    fileIds = initialPhotoFileIds.slice(0, 6);
+  } else if (typeof initialPhotoFileIds === 'string') {
+    fileIds = [initialPhotoFileIds];
+  } else {
+    fileIds = [];
+  }
+
   const collection: PhotoCollection = { visitId, storeId, storeName, sections, fileIds, timer: null };
   collections.set(telegramId, collection);
 
@@ -97,4 +107,9 @@ async function finalizeCollection(telegramId: number): Promise<void> {
       .text('✏️ Edit', `edit:${collection.visitId}`)
       .text('🗑️ Delete', `delete:${collection.visitId}`),
   });
+
+  // Broadcast to the group chat — fires after photos are uploaded so the
+  // deep-linked visit detail page renders with photos already in place.
+  // Failure here must not affect the visit — broadcast helper handles its own errors.
+  await broadcastVisitLocked(collection.visitId, botApi);
 }

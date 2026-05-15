@@ -5,12 +5,18 @@ declare global {
     Telegram?: {
       WebApp?: {
         initData: string;
+        initDataUnsafe?: { start_param?: string };
         ready?: () => void;
         expand?: () => void;
         BackButton?: { show: () => void; hide: () => void; onClick: (cb: () => void) => void };
       };
     };
   }
+}
+
+export function getStartParam(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.Telegram?.WebApp?.initDataUnsafe?.start_param ?? null;
 }
 
 let scriptPromise: Promise<void> | null = null;

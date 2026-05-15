@@ -20,7 +20,15 @@ interface FullVisit {
   photo_count: number;
   is_locked: boolean;
   edited_at: string | null;
+  grade: 1 | 2 | 3 | null;
+  grade_comments: string | null;
 }
+
+const GRADE_STYLES: Record<1 | 2 | 3, { label: string; pill: string }> = {
+  1: { label: "Grade 1", pill: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  2: { label: "Grade 2", pill: "bg-amber-50 text-amber-700 border-amber-200" },
+  3: { label: "Grade 3", pill: "bg-rose-50 text-rose-700 border-rose-200" },
+};
 
 interface VisitPayload {
   visit: FullVisit;
@@ -153,6 +161,20 @@ export default function VisitPage({
               {visit.edited_at && <> · edited</>}
               {" · "}{filled.length}/6 sections
             </p>
+            {visit.grade && (
+              <div className="mt-2">
+                <span
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${GRADE_STYLES[visit.grade].pill}`}
+                >
+                  {GRADE_STYLES[visit.grade].label}
+                </span>
+                {visit.grade_comments && (
+                  <p className="mt-1.5 whitespace-pre-wrap text-[12px] leading-relaxed text-ink-400">
+                    {visit.grade_comments}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <Link
             href={`/m/visit/${visit.id}/edit`}

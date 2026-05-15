@@ -34,5 +34,10 @@ export const config = {
   },
   miniapp: {
     url: optional('MINIAPP_URL'),
+    shortName: process.env.TELEGRAM_MINIAPP_SHORT_NAME || 'miniapp',
+  },
+  broadcast: {
+    chatId: optional('BROADCAST_CHAT_ID'),
+    botUsername: optional('TELEGRAM_BOT_USERNAME'),
   },
 } as const;

@@ -12,6 +12,8 @@ export interface Visit {
   follow_up: string | null;
   buzz_plan: string | null;
   training: string | null;
+  grade: 1 | 2 | 3 | null;
+  grade_comments: string | null;
   is_locked: boolean;
   locked_at: string | null;
   submitted_at: string | null;
@@ -22,6 +24,8 @@ export interface Visit {
 export async function createVisit(data: {
   store_id: string;
   cm_telegram_id: number;
+  grade?: 1 | 2 | 3 | null;
+  grade_comments?: string | null;
 }): Promise<Visit | null> {
   const { data: row, error } = await supabase
     .from('visits')
@@ -34,6 +38,23 @@ export async function createVisit(data: {
     return null;
   }
   return row as Visit;
+}
+
+export async function setVisitGrade(
+  visitId: string,
+  grade: 1 | 2 | 3,
+  comments: string | null,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('visits')
+    .update({ grade, grade_comments: comments })
+    .eq('id', visitId);
+
+  if (error) {
+    console.error('setVisitGrade error:', error);
+    return false;
+  }
+  return true;
 }
 
 export async function attachVisitSections(

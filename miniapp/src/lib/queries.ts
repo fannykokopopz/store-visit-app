@@ -59,6 +59,8 @@ export interface FullVisit extends VisitSummary {
   submitted_at: string | null;
   edited_at: string | null;
   photo_paths: string[];
+  grade: 1 | 2 | 3 | null;
+  grade_comments: string | null;
 }
 
 export async function getPortfolioForCM(
@@ -353,6 +355,8 @@ export async function getFullVisitForCM(
     photo_count: photoPaths.length,
     thumb_urls: [],
     photo_paths: photoPaths,
+    grade: v.grade ?? null,
+    grade_comments: v.grade_comments ?? null,
   };
 }
 
