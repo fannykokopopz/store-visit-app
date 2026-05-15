@@ -28,7 +28,6 @@ interface FullVisit {
   display_stock: string | null;
   follow_up: string | null;
   buzz_plan: string | null;
-  training: string | null;
   photo_count: number;
   is_locked: boolean;
   edited_at: string | null;
@@ -54,7 +53,7 @@ interface VisitPayload {
 
 interface MarketCM { telegram_id: number; name: string }
 
-type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan" | "training";
+type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan";
 
 const SECTIONS: Array<{
   key: SectionKey;
@@ -97,13 +96,6 @@ const SECTIONS: Array<{
     icon: "⚡",
     iconBgClass: "bg-[var(--color-section-purple-bg)]",
     titleClass: "text-[#5B2DB5]",
-  },
-  {
-    key: "training",
-    label: "Training",
-    icon: "🎓",
-    iconBgClass: "bg-[var(--color-section-teal-bg)]",
-    titleClass: "text-[var(--color-section-teal-fg)]",
   },
 ];
 

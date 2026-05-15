@@ -4,7 +4,6 @@ export interface ParsedSections {
   displayStock: string | null;
   followUp: string | null;
   buzzPlan: string | null;
-  training: string | null;
 }
 
 // Each section emoji is followed by an optional U+FE0F (variation selector-16).
@@ -17,13 +16,12 @@ const SECTION_HEADERS: Array<{ key: keyof ParsedSections; pattern: RegExp }> = [
   { key: 'displayStock', pattern: /(?:^|\n)[ \t]*(?:3️⃣|📦️?|3\.)[ \t]+Display[ \t]*[&+][ \t]*Stock\b[^\n]*/i },
   { key: 'followUp',     pattern: /(?:^|\n)[ \t]*(?:4️⃣|✅️?|4\.)[ \t]+What[ \t]+to[ \t]+Follow[ \t]+Up\b[^\n]*/i },
   { key: 'buzzPlan',     pattern: /(?:^|\n)[ \t]*(?:5️⃣|⚡️?|5\.)[ \t]+Buzz[ \t]+Plan\b[^\n]*/i },
-  { key: 'training',     pattern: /(?:^|\n)[ \t]*(?:6️⃣|🎓️?|6\.)[ \t]+Training\b[^\n]*/i },
 ];
 
 export function parseTemplate(text: string): ParsedSections {
   const sections: ParsedSections = {
     goodNews: null, competitors: null,
-    displayStock: null, followUp: null, buzzPlan: null, training: null,
+    displayStock: null, followUp: null, buzzPlan: null,
   };
 
   const markers: Array<{ key: keyof ParsedSections; contentStart: number; headerStart: number }> = [];
@@ -67,7 +65,6 @@ export function sectionsPreview(sections: ParsedSections): string {
     { key: 'displayStock',emoji: '3️⃣' },
     { key: 'followUp',    emoji: '4️⃣' },
     { key: 'buzzPlan',    emoji: '5️⃣' },
-    { key: 'training',    emoji: '6️⃣' },
   ] as const;
 
   return defs.map(({ key, emoji }) => {

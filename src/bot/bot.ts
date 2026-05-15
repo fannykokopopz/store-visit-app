@@ -159,7 +159,7 @@ export function createBot(): Bot<BotContext> {
     await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
     await ctx.reply(
       `📝 *Editing Notes — ${info.store_name}*\n\nSend your updated notes and I'll swap them in 🔄\n\n` +
-      `\`\`\`\n🌟 Good News\n\n\n🔍 Competitors' Insights\n\n\n📦 Display & Stock\n\n\n✅ What to Follow Up\n\n\n⚡ Buzz Plan\n\n\n🎓 Training\n\`\`\`\n\n_/cancel to stop_`,
+      `\`\`\`\n🌟 Good News\n\n\n🔍 Competitors' Insights\n\n\n📦 Display & Stock\n\n\n✅ What to Follow Up\n\n\n⚡ Buzz Plan\n\`\`\`\n\n_/cancel to stop_`,
       { parse_mode: 'Markdown' },
     );
   });
@@ -289,12 +289,6 @@ export function createBot(): Bot<BotContext> {
     } else {
       await ctx.reply("Something went wrong — give it another try 🙏");
     }
-  });
-
-  // Dismiss the "Log training details" prompt sent after Step 3 Yes
-  bot.callbackQuery(/^training:dismiss:/, async (ctx) => {
-    await ctx.answerCallbackQuery('Add it later from the visit page 👍');
-    await ctx.deleteMessage().catch(() => {});
   });
 
   // Cancel delete confirmation

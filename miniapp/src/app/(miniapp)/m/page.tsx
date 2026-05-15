@@ -39,10 +39,9 @@ interface SearchResult {
   display_stock: string | null;
   follow_up: string | null;
   buzz_plan: string | null;
-  training: string | null;
 }
 
-type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan" | "training";
+type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan";
 
 interface FilterOptions {
   stores: { id: string; name: string; chain: string }[];
@@ -78,7 +77,6 @@ const SECTION_LABELS: Record<string, string> = {
   display_stock: "Display & Stock",
   follow_up: "Follow Up",
   buzz_plan: "Buzz Plan",
-  training: "Training",
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -740,7 +738,6 @@ function SearchResultCard({ result, query }: { result: SearchResult; query: stri
     { key: "display_stock", label: "Display & Stock", value: result.display_stock },
     { key: "follow_up", label: "Follow Up", value: result.follow_up },
     { key: "buzz_plan", label: "Buzz Plan", value: result.buzz_plan },
-    { key: "training", label: "Training", value: result.training },
   ].filter((s) => s.value?.toLowerCase().includes(query.toLowerCase()));
 
   return (

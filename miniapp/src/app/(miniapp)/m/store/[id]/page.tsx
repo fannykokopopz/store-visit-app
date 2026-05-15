@@ -14,7 +14,6 @@ interface VisitSummary {
   display_stock: string | null;
   follow_up: string | null;
   buzz_plan: string | null;
-  training: string | null;
   cm_name?: string | null;
   photo_count: number;
   thumb_urls: string[];
@@ -42,7 +41,7 @@ interface StorePayload {
   visits: VisitSummary[];
 }
 
-type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan" | "training";
+type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan";
 
 const SECTIONS: Array<{
   key: SectionKey;
@@ -56,7 +55,6 @@ const SECTIONS: Array<{
   { key: "display_stock", label: "Display & Stock",       icon: "📦", colorClass: "bg-[var(--color-section-green-bg)] border-[var(--color-section-green-border)]",  titleClass: "text-[var(--color-tier-t2-fg)]" },
   { key: "follow_up",     label: "What to Follow Up",     icon: "✅", colorClass: "bg-[var(--color-section-pink-bg)] border-[var(--color-section-pink-border)]",   titleClass: "text-[#C0185A]" },
   { key: "buzz_plan",     label: "Buzz Plan",             icon: "⚡", colorClass: "bg-[var(--color-section-purple-bg)] border-[var(--color-section-purple-border)]", titleClass: "text-[#5B2DB5]" },
-  { key: "training",      label: "Training",              icon: "🎓", colorClass: "bg-[var(--color-section-teal-bg)] border-[var(--color-section-teal-border)]",    titleClass: "text-[var(--color-section-teal-fg)]" },
 ];
 
 function fmtDate(dateStr: string): string {

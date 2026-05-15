@@ -101,7 +101,6 @@ export async function attachVisitSections(
       display_stock: sections.displayStock,
       follow_up: sections.followUp,
       buzz_plan: sections.buzzPlan,
-      training: sections.training,
     })
     .eq('id', visitId);
 
@@ -264,7 +263,6 @@ export async function updateVisitSections(
       display_stock: sections.displayStock,
       follow_up: sections.followUp,
       buzz_plan: sections.buzzPlan,
-      training: sections.training,
       edited_at: new Date().toISOString(),
     })
     .eq('id', visitId);

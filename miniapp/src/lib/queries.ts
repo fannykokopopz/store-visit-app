@@ -23,7 +23,6 @@ export interface VisitSummary {
   display_stock: string | null;
   follow_up: string | null;
   buzz_plan: string | null;
-  training: string | null;
   cm_name?: string | null;   // populated when allCMs=true
   photo_count: number;
   thumb_urls: string[];      // first 3, for list view
@@ -50,7 +49,6 @@ export interface SearchResult {
   display_stock: string | null;
   follow_up: string | null;
   buzz_plan: string | null;
-  training: string | null;
 }
 
 export interface VisitTrainedStaff {
@@ -152,14 +150,14 @@ export async function getStoreTimelineForCM(
     options?.allCMs
       ? supabase
           .from("visits")
-          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, grade, grade_comments, cm_telegram_id, cms!cm_telegram_id(full_name, nickname)")
+          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, grade, grade_comments, cm_telegram_id, cms!cm_telegram_id(full_name, nickname)")
           .eq("store_id", storeId)
           .eq("is_locked", true)
           .order("visit_date", { ascending: false })
           .order("created_at", { ascending: false })
       : supabase
           .from("visits")
-          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, training, grade, grade_comments, visit_cms!inner(cm_telegram_id)")
+          .select("id, visit_date, good_news, competitors, display_stock, follow_up, buzz_plan, grade, grade_comments, visit_cms!inner(cm_telegram_id)")
           .eq("visit_cms.cm_telegram_id", telegramId)
           .eq("store_id", storeId)
           .eq("is_locked", true)
@@ -211,7 +209,6 @@ export async function getStoreTimelineForCM(
     display_stock: v.display_stock ?? null,
     follow_up: v.follow_up ?? null,
     buzz_plan: v.buzz_plan ?? null,
-    training: v.training ?? null,
     cm_name: options?.allCMs ? (v.cms?.nickname ?? v.cms?.full_name ?? null) : undefined,
     photo_count: countByVisit.get(v.id) ?? 0,
     thumb_urls: (thumbPathsByVisit.get(v.id) ?? []).map((p) => signedMap.get(p) ?? "").filter(Boolean),
@@ -272,8 +269,7 @@ export type VisitSectionKey =
   | "competitors"
   | "display_stock"
   | "follow_up"
-  | "buzz_plan"
-  | "training";
+  | "buzz_plan";
 
 export interface VisitFilterOptions {
   q?: string;                          // text search (>=2 chars to apply)
@@ -286,7 +282,7 @@ export interface VisitFilterOptions {
 }
 
 const ALL_SECTIONS: VisitSectionKey[] = [
-  "good_news", "competitors", "display_stock", "follow_up", "buzz_plan", "training",
+  "good_news", "competitors", "display_stock", "follow_up", "buzz_plan",
 ];
 
 export async function searchVisitsInMarket(
@@ -314,7 +310,7 @@ export async function searchVisitsInMarket(
   const query = (options.q ?? "").trim();
   const useTextSearch = query.length >= 2;
 
-  const baseSelect = "id, visit_date, store_id, good_news, competitors, display_stock, follow_up, buzz_plan, training, cms!cm_telegram_id(full_name, nickname)";
+  const baseSelect = "id, visit_date, store_id, good_news, competitors, display_stock, follow_up, buzz_plan, cms!cm_telegram_id(full_name, nickname)";
   const filterByCM = options.cmTelegramId !== undefined;
 
   let q = supabase
@@ -356,8 +352,7 @@ export async function searchVisitsInMarket(
       display_stock: v.display_stock ?? null,
       follow_up: v.follow_up ?? null,
       buzz_plan: v.buzz_plan ?? null,
-      training: v.training ?? null,
-    };
+      };
   });
 }
 
@@ -488,7 +483,6 @@ export async function getFullVisitForCM(
     display_stock: v.display_stock,
     follow_up: v.follow_up,
     buzz_plan: v.buzz_plan,
-    training: v.training,
     store_id: v.store_id,
     store_name: v.stores?.name ?? "Unknown store",
     cm_telegram_id: v.cm_telegram_id,
@@ -607,7 +601,7 @@ export async function getStoreIdForVisit(visitId: string): Promise<string | null
 export async function updateVisitText(
   telegramId: number,
   visitId: string,
-  fields: Partial<Pick<FullVisit, "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan" | "training">>,
+  fields: Partial<Pick<FullVisit, "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan">>,
 ): Promise<boolean> {
   const { error } = await supabase
     .from("visits")

@@ -2,7 +2,7 @@ import { authedCMFromRequest } from "@/lib/miniapp-auth";
 import { searchVisitsInMarket, VisitSectionKey } from "@/lib/queries";
 
 const SECTION_KEYS: VisitSectionKey[] = [
-  "good_news", "competitors", "display_stock", "follow_up", "buzz_plan", "training",
+  "good_news", "competitors", "display_stock", "follow_up", "buzz_plan",
 ];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

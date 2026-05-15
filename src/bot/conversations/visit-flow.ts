@@ -175,6 +175,7 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
   await ctx.reply(
     `📝 *Step 1 of 3 — Notes*\n\n` + buildTemplateMessage(storeName),
+
     { parse_mode: 'MarkdownV2' },
   );
 
@@ -260,11 +261,11 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   // ── Step 2/3: Grade (tap → edit msg to ask for comment) ───────────────────
 
   const gradeMsg = await ctx.reply(
-    `📊 *Step 2 of 3 — Grade this store*\n\n` +
-    `1️⃣ Great store — hitting all 3 areas\n` +
+    `📊 *Step 2 of 3 — Grade This Store*\n\n` +
+    `1️⃣ Great Store — Hitting All 3 Areas\n` +
     `   _(Allies / Displays / Sales)_\n\n` +
-    `2️⃣ Good store — hitting 2 areas\n\n` +
-    `3️⃣ Needs improvement`,
+    `2️⃣ Good Store — Hitting 2 Areas\n\n` +
+    `3️⃣ Needs Improvement`,
     {
       parse_mode: 'Markdown',
       reply_markup: new InlineKeyboard()
@@ -307,16 +308,22 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
   }
 
-  // Edit the grade message in-place to show the chosen grade + comment prompt
-  await ctx.api.editMessageText(
-    gradeMsg.chat.id,
-    gradeMsg.message_id,
-    `📊 *Grade ${grade} ✓*\n\nAny comments on this grade? Type them, or tap Skip.`,
-    {
-      parse_mode: 'Markdown',
-      reply_markup: new InlineKeyboard().text('Skip', 'grade:skip-comments'),
-    },
-  ).catch(() => {});
+  // Render the comment-stage message. Keep grade buttons available so the user
+  // can re-tap if they hit the wrong one. Skip is on the left (secondary).
+  async function renderGradeCommentPrompt(g: 1 | 2 | 3) {
+    await ctx.api.editMessageText(
+      gradeMsg.chat.id,
+      gradeMsg.message_id,
+      `📊 *Grade ${g}* — Add a Comment?\n\nType a comment, or tap Skip. Tap 1/2/3 to change the grade.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: new InlineKeyboard()
+          .text('Skip', 'grade:skip-comments')
+          .text('1', 'grade:1').text('2', 'grade:2').text('3', 'grade:3'),
+      },
+    ).catch(() => {});
+  }
+  await renderGradeCommentPrompt(grade);
 
   let gradeComments: string | null = null;
   let commentsDone = false;
@@ -336,10 +343,23 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
 
     if (upd.callbackQuery) {
-      if (upd.callbackQuery.data === 'grade:skip-comments') {
+      const data = upd.callbackQuery.data ?? '';
+      if (data === 'grade:skip-comments') {
         await upd.answerCallbackQuery('Skipped');
         commentsDone = true;
         break;
+      }
+      const m = data.match(/^grade:([1-3])$/);
+      if (m) {
+        const newGrade = Number(m[1]) as 1 | 2 | 3;
+        if (newGrade !== grade) {
+          grade = newGrade;
+          await upd.answerCallbackQuery(`Grade ${grade} ✓`);
+          await renderGradeCommentPrompt(grade);
+        } else {
+          await upd.answerCallbackQuery().catch(() => {});
+        }
+        continue;
       }
       await upd.answerCallbackQuery().catch(() => {});
       continue;
@@ -353,14 +373,14 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
   }
 
-  // ── Step 3/3: Training (Yes → mini-app, Skip → done) ─────────────────────
+  // ── Step 3/3: Training (Yes → mini-app prompt, Skip → straight to Done) ──
 
   await ctx.reply(
-    `🎓 *Step 3 of 3 — Train anyone today?*\n\n` +
-    `If yes, you'll log the staff + product details in the mini-app — faster with the staff list and brand chips there.`,
+    `🎓 *Step 3 of 3 — Train Anyone Today?*\n\n` +
+    `If yes, you'll log staff + product details in the mini-app — faster with the staff list and brand chips there.`,
     {
       parse_mode: 'Markdown',
-      reply_markup: new InlineKeyboard().text('Yes', 'training:yes').text('Skip', 'training:no'),
+      reply_markup: new InlineKeyboard().text('Skip', 'training:no').text('Yes', 'training:yes'),
     },
   );
 
@@ -386,6 +406,50 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
   }
 
+  // ── If user picked Yes, surface the training prompt BEFORE Done ──────────
+  //
+  // The prompt has two callback buttons (both finalize the visit) plus a URL
+  // button that opens the mini-app. Whichever the user taps, we fall through
+  // and finalize. The URL button doesn't fire a callback, so users who tap it
+  // need to come back and tap one of the callback options to close out the
+  // flow — the wording makes that clear.
+
+  if (trainingChoice === 'yes' && config.broadcast.botUsername) {
+    const deepLink =
+      `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}` +
+      `?startapp=visit_${visit.id}_training`;
+    await ctx.reply(
+      `🎓 *Log Training Details*\n\nTap *Open in Mini-App* to add them now, or *Add Later* if you'd rather do it from the visit page after.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: new InlineKeyboard()
+          .url('📝 Open in Mini-App', deepLink).row()
+          .text('Add Later', 'training:close').text("I've Added It", 'training:close'),
+      },
+    );
+
+    let trainingDone = false;
+    while (!trainingDone) {
+      const upd = await conversation.wait();
+      if (upd.message?.text === '/cancel') {
+        await ctx.reply('No worries — visit cancelled.');
+        return;
+      }
+      if (upd.message?.photo) {
+        const p = upd.message.photo;
+        const fileId = p[p.length - 1].file_id;
+        await conversation.external(() => handleIncomingPhoto(telegramId, fileId));
+        continue;
+      }
+      if (upd.callbackQuery?.data === 'training:close') {
+        await upd.answerCallbackQuery();
+        trainingDone = true;
+        break;
+      }
+      if (upd.callbackQuery) await upd.answerCallbackQuery().catch(() => {});
+    }
+  }
+
   // ── Finalize: grade, lock, then wait for photo uploads ────────────────────
 
   const savedPhotos = await conversation.external(async () => {
@@ -401,11 +465,11 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
   // ── Unified Done message ──────────────────────────────────────────────────
 
   const photoLine = savedPhotos > 0
-    ? `\n📸 ${savedPhotos} ${savedPhotos === 1 ? 'photo' : 'photos'} saved`
+    ? `\n📸 ${savedPhotos} ${savedPhotos === 1 ? 'Photo' : 'Photos'} Saved`
     : '';
 
   await ctx.reply(
-    `🎉 *${storeName}* logged ✓\n` +
+    `🎉 *${storeName}* Logged ✓\n` +
     `Grade ${grade}` +
     photoLine,
     {
@@ -413,21 +477,4 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
       reply_markup: buildDoneKeyboard(visit.id),
     },
   );
-
-  // ── If user picked Yes for training, prompt to log details in mini-app ────
-
-  if (trainingChoice === 'yes' && config.broadcast.botUsername) {
-    const deepLink =
-      `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}` +
-      `?startapp=visit_${visit.id}_training`;
-    await ctx.reply(
-      `🎓 *Log training details*\n\nTap below to open the mini-app, or add it later from the visit page.`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: new InlineKeyboard()
-          .url('📝 Open in mini-app', deepLink).row()
-          .text('Skip — add later', `training:dismiss:${visit.id}`),
-      },
-    );
-  }
 }

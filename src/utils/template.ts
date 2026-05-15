@@ -13,9 +13,6 @@ export const VISIT_TEMPLATE = `🌟 Good News
 ⚡ Buzz Plan
 
 
-🎓 Training
-
-
 `;
 
 export function buildTemplateMessage(storeName: string): string {

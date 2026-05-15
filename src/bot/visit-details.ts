@@ -3,7 +3,7 @@ import { getFullVisit } from '../db/queries/visits.js';
 import { getPhotosForVisit, signPhotoUrls } from '../db/queries/photos.js';
 
 const SECTION_DEFS: Array<{
-  key: 'good_news' | 'competitors' | 'display_stock' | 'follow_up' | 'buzz_plan' | 'training';
+  key: 'good_news' | 'competitors' | 'display_stock' | 'follow_up' | 'buzz_plan';
   label: string;
   emoji: string;
 }> = [
@@ -12,7 +12,6 @@ const SECTION_DEFS: Array<{
   { key: 'display_stock', label: 'Display & Stock',        emoji: '📦' },
   { key: 'follow_up',     label: 'What to Follow Up',      emoji: '✅' },
   { key: 'buzz_plan',     label: 'Buzz Plan',              emoji: '⚡' },
-  { key: 'training',      label: 'Training',               emoji: '🎓' },
 ];
 
 const TG_CAPTION_LIMIT = 1000; // Telegram caps at 1024; leave headroom for markdown overhead
