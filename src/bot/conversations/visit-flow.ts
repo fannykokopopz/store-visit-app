@@ -11,7 +11,6 @@ import {
   getLastVisitDatePerStore,
 } from '../../db/queries/visits.js';
 import { setVisitCMs } from '../../db/queries/visit-cms.js';
-import { getStaffForStore, createStaff, attachTrainedStaffToVisit, type Staff } from '../../db/queries/staff.js';
 import { getActivePlan, consumePlan } from '../../db/queries/visit-plans.js';
 import { buildStorePicker, buildSearchResultsPicker, buildStoreContextMessage } from '../keyboards/store-picker.js';
 import { buildTemplateMessage } from '../../utils/template.js';
@@ -21,30 +20,10 @@ import { sendVisitDetails } from '../visit-details.js';
 import { broadcastVisitLocked } from '../../notifications/visit-broadcast.js';
 import { config } from '../../config.js';
 
-function buildStaffPicker(staff: Staff[], selected: Set<string>): InlineKeyboard {
-  const kb = new InlineKeyboard();
-  for (let i = 0; i < staff.length; i += 2) {
-    const a = staff[i];
-    const labelA = `${selected.has(a.id) ? '✓ ' : ''}${a.name}`;
-    kb.text(labelA, `staff:${a.id}`);
-    if (i + 1 < staff.length) {
-      const b = staff[i + 1];
-      const labelB = `${selected.has(b.id) ? '✓ ' : ''}${b.name}`;
-      kb.text(labelB, `staff:${b.id}`);
-    }
-    kb.row();
-  }
-  kb.text('✅ Done', 'staff:done').text('+ Add new', 'staff:add');
-  return kb;
-}
-
-function buildDoneKeyboard(visitId: string, hasTraining: boolean): InlineKeyboard {
+function buildDoneKeyboard(visitId: string): InlineKeyboard {
   const kb = new InlineKeyboard();
   if (config.broadcast.botUsername) {
     const base = `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}`;
-    if (hasTraining) {
-      kb.url('📝 Add product details', `${base}?startapp=visit_${visitId}_training`).row();
-    }
     kb.url('🔍 Open in mini-app', `${base}?startapp=visit_${visitId}`).row();
   }
   kb.text('✏️ Edit', `edit:${visitId}`).text('🗑️ Delete', `delete:${visitId}`);
@@ -374,13 +353,11 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
   }
 
-  // ── Step 3/3: Training (tag staff only — products go in mini-app) ─────────
-
-  const trainedStaffIds: string[] = [];
+  // ── Step 3/3: Training (Yes → mini-app, Skip → done) ─────────────────────
 
   await ctx.reply(
     `🎓 *Step 3 of 3 — Train anyone today?*\n\n` +
-    `Tag who you trained. Add product details in the mini-app after.`,
+    `If yes, you'll log the staff + product details in the mini-app — faster with the staff list and brand chips there.`,
     {
       parse_mode: 'Markdown',
       reply_markup: new InlineKeyboard().text('Yes', 'training:yes').text('Skip', 'training:no'),
@@ -409,89 +386,10 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
   }
 
-  if (trainingChoice === 'yes') {
-    let staffList: Staff[] = await conversation.external(() => getStaffForStore(storeId));
-    const tagged = new Set<string>();
-
-    const pickerMsg = await ctx.reply(
-      'Tap staff you trained, then ✅ Done. Use + Add new if a staff member is missing.',
-      { reply_markup: buildStaffPicker(staffList, tagged) },
-    );
-
-    staffPickerLoop: while (true) {
-      const upd = await conversation.wait();
-
-      if (upd.message?.text === '/cancel') {
-        await ctx.reply('No worries — visit cancelled.');
-        return;
-      }
-      if (upd.message?.photo) {
-        const p = upd.message.photo;
-        const fileId = p[p.length - 1].file_id;
-        await conversation.external(() => handleIncomingPhoto(telegramId, fileId));
-        continue;
-      }
-      if (!upd.callbackQuery) continue;
-
-      const data = upd.callbackQuery.data ?? '';
-
-      if (data === 'staff:done') {
-        await upd.answerCallbackQuery(`${tagged.size} tagged`);
-        break staffPickerLoop;
-      }
-
-      if (data === 'staff:add') {
-        await upd.answerCallbackQuery();
-        await ctx.reply('Name of the new staff member?');
-        const nameUpd = await conversation.wait();
-        if (nameUpd.message?.text === '/cancel') {
-          await ctx.reply('No worries — visit cancelled.');
-          return;
-        }
-        const name = nameUpd.message?.text?.trim();
-        if (!name) {
-          await ctx.reply('No name received — back to the picker.');
-        } else {
-          const fresh = await conversation.external(() => createStaff({ name, store_id: storeId }));
-          if (fresh) {
-            staffList = [...staffList, fresh].sort((a, b) => a.name.localeCompare(b.name));
-            tagged.add(fresh.id);
-          }
-        }
-        await ctx.api.editMessageReplyMarkup(pickerMsg.chat.id, pickerMsg.message_id, {
-          reply_markup: buildStaffPicker(staffList, tagged),
-        }).catch(() => {});
-        continue;
-      }
-
-      const m = data.match(/^staff:([0-9a-f-]{36})$/i);
-      if (m) {
-        const sid = m[1];
-        if (tagged.has(sid)) tagged.delete(sid);
-        else tagged.add(sid);
-        await upd.answerCallbackQuery();
-        await ctx.api.editMessageReplyMarkup(pickerMsg.chat.id, pickerMsg.message_id, {
-          reply_markup: buildStaffPicker(staffList, tagged),
-        });
-        continue;
-      }
-
-      await upd.answerCallbackQuery().catch(() => {});
-    }
-
-    trainedStaffIds.push(...tagged);
-  }
-
-  // ── Finalize: grade, training, lock, then wait for photo uploads ──────────
+  // ── Finalize: grade, lock, then wait for photo uploads ────────────────────
 
   const savedPhotos = await conversation.external(async () => {
     if (grade !== null) await setVisitGrade(visit.id, grade, gradeComments);
-    if (trainedStaffIds.length > 0) {
-      await attachTrainedStaffToVisit(
-        visit.id,
-        trainedStaffIds.map((staff_id) => ({ staff_id, products: '' })),
-      );
-    }
     await lockVisit(visit.id);
     if (plan) await consumePlan(plan.id);
     await broadcastVisitLocked(visit.id, ctx.api).catch(() => {});
@@ -502,20 +400,34 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
 
   // ── Unified Done message ──────────────────────────────────────────────────
 
-  const trainedLine = trainedStaffIds.length > 0
-    ? ` · ${trainedStaffIds.length} staff trained`
-    : '';
   const photoLine = savedPhotos > 0
     ? `\n📸 ${savedPhotos} ${savedPhotos === 1 ? 'photo' : 'photos'} saved`
     : '';
 
   await ctx.reply(
     `🎉 *${storeName}* logged ✓\n` +
-    `Grade ${grade}${trainedLine}` +
+    `Grade ${grade}` +
     photoLine,
     {
       parse_mode: 'Markdown',
-      reply_markup: buildDoneKeyboard(visit.id, trainedStaffIds.length > 0),
+      reply_markup: buildDoneKeyboard(visit.id),
     },
   );
+
+  // ── If user picked Yes for training, prompt to log details in mini-app ────
+
+  if (trainingChoice === 'yes' && config.broadcast.botUsername) {
+    const deepLink =
+      `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}` +
+      `?startapp=visit_${visit.id}_training`;
+    await ctx.reply(
+      `🎓 *Log training details*\n\nTap below to open the mini-app, or add it later from the visit page.`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: new InlineKeyboard()
+          .url('📝 Open in mini-app', deepLink).row()
+          .text('Skip — add later', `training:dismiss:${visit.id}`),
+      },
+    );
+  }
 }

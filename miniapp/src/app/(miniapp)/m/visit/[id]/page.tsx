@@ -134,7 +134,12 @@ export default function VisitPage({
   const [savingCMs, setSavingCMs] = useState(false);
   const [editingTraining, setEditingTraining] = useState(false);
   const [trainingDrafts, setTrainingDrafts] = useState<Record<string, string>>({});
+  const [taggedStaffIds, setTaggedStaffIds] = useState<Set<string>>(new Set());
+  const [storeStaff, setStoreStaff] = useState<{ id: string; name: string }[] | null>(null);
   const [savingTraining, setSavingTraining] = useState(false);
+  const [addingStaff, setAddingStaff] = useState(false);
+  const [newStaffName, setNewStaffName] = useState("");
+  const [creatingStaff, setCreatingStaff] = useState(false);
   useSwipeBack();
 
   useEffect(() => {
@@ -162,12 +167,9 @@ export default function VisitPage({
     if (typeof window === "undefined") return;
     if (window.location.hash !== "#training") return;
     if (!data.canEditTraining) return;
-    if (data.visit.trained_staff.length === 0) return;
-    const drafts: Record<string, string> = {};
-    for (const s of data.visit.trained_staff) drafts[s.staff_id] = s.products ?? "";
-    setTrainingDrafts(drafts);
-    setEditingTraining(true);
+    openTrainingEditor();
     window.history.replaceState(null, "", window.location.pathname);
+
   }, [data]);
 
   function openCMEditor() {
@@ -213,23 +215,73 @@ export default function VisitPage({
   function openTrainingEditor() {
     if (!data) return;
     const drafts: Record<string, string> = {};
-    for (const s of data.visit.trained_staff) drafts[s.staff_id] = s.products ?? "";
+    const tagged = new Set<string>();
+    for (const s of data.visit.trained_staff) {
+      drafts[s.staff_id] = s.products ?? "";
+      tagged.add(s.staff_id);
+    }
     setTrainingDrafts(drafts);
+    setTaggedStaffIds(tagged);
+    setAddingStaff(false);
+    setNewStaffName("");
     setEditingTraining(true);
+    // Lazy-load store staff list
+    if (storeStaff === null && initData) {
+      fetch(`/api/m/visit/${id}/store-staff`, {
+        headers: { Authorization: `tma ${initData}` },
+      })
+        .then((r) => r.json())
+        .then((j) => setStoreStaff(j.staff ?? []))
+        .catch(() => setStoreStaff([]));
+    }
+  }
+
+  function toggleStaffTag(staffId: string) {
+    setTaggedStaffIds((curr) => {
+      const next = new Set(curr);
+      if (next.has(staffId)) next.delete(staffId);
+      else next.add(staffId);
+      return next;
+    });
+  }
+
+  async function addNewStaff() {
+    const name = newStaffName.trim();
+    if (!name || !initData) return;
+    setCreatingStaff(true);
+    try {
+      const res = await fetch(`/api/m/visit/${id}/staff`, {
+        method: "POST",
+        headers: { Authorization: `tma ${initData}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        const { staff } = await res.json();
+        setStoreStaff((curr) => {
+          const list = curr ? [...curr, staff] : [staff];
+          return list.sort((a, b) => a.name.localeCompare(b.name));
+        });
+        setTaggedStaffIds((curr) => new Set(curr).add(staff.id));
+        setNewStaffName("");
+        setAddingStaff(false);
+      }
+    } finally {
+      setCreatingStaff(false);
+    }
   }
 
   async function saveTraining() {
     if (!initData || !data) return;
     setSavingTraining(true);
     try {
-      const updates = data.visit.trained_staff.map((s) => ({
-        staff_id: s.staff_id,
-        products: trainingDrafts[s.staff_id] ?? "",
+      const trained = Array.from(taggedStaffIds).map((staff_id) => ({
+        staff_id,
+        products: trainingDrafts[staff_id] ?? "",
       }));
       const res = await fetch(`/api/m/visit/${id}/training`, {
         method: "PATCH",
         headers: { Authorization: `tma ${initData}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ updates }),
+        body: JSON.stringify({ trained }),
       });
       if (res.ok) {
         const fresh = await fetch(`/api/m/visit/${id}`, { headers: { Authorization: `tma ${initData}` } });
@@ -379,7 +431,7 @@ export default function VisitPage({
       </div>
 
       {/* Trained Staff */}
-      {trainedStaff.length > 0 && (
+      {(trainedStaff.length > 0 || canEditTraining) && (
         <div className="px-3.5 mt-2">
           <div className="rounded-[18px] border border-ink-100 bg-white p-4">
             <div className="flex items-center justify-between mb-3">
@@ -396,22 +448,26 @@ export default function VisitPage({
                   onClick={openTrainingEditor}
                   className="rounded-full bg-[var(--color-section-teal-bg)] px-2.5 py-0.5 text-[11px] font-bold text-[var(--color-section-teal-fg)]"
                 >
-                  Edit details
+                  {trainedStaff.length > 0 ? "Edit details" : "+ Add training"}
                 </button>
               )}
             </div>
-            <ul className="space-y-2">
-              {trainedStaff.map((s) => (
-                <li key={s.staff_id} className="rounded-xl border border-ink-100 px-3 py-2">
-                  <p className="text-[13px] font-bold text-ink-700">{s.name}</p>
-                  {s.products ? (
-                    <p className="mt-0.5 whitespace-pre-wrap text-[12px] leading-relaxed text-ink-500">{s.products}</p>
-                  ) : (
-                    <p className="mt-0.5 text-[12px] italic text-ink-300">No product details yet</p>
-                  )}
-                </li>
-              ))}
-            </ul>
+            {trainedStaff.length === 0 ? (
+              <p className="text-[12px] italic text-ink-300">No staff trained yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {trainedStaff.map((s) => (
+                  <li key={s.staff_id} className="rounded-xl border border-ink-100 px-3 py-2">
+                    <p className="text-[13px] font-bold text-ink-700">{s.name}</p>
+                    {s.products ? (
+                      <p className="mt-0.5 whitespace-pre-wrap text-[12px] leading-relaxed text-ink-500">{s.products}</p>
+                    ) : (
+                      <p className="mt-0.5 text-[12px] italic text-ink-300">No product details yet</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}
@@ -422,56 +478,115 @@ export default function VisitPage({
           <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setEditingTraining(false)} />
           <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-xl max-h-[85vh] flex flex-col">
             <div className="w-8 h-1 bg-ink-200 rounded-full mx-auto mb-4" />
-            <h2 className="text-base font-extrabold text-ink-700 mb-1">Training details</h2>
-            <p className="text-[11px] text-ink-300 mb-3">Add the products you trained each staff on.</p>
+            <h2 className="text-base font-extrabold text-ink-700 mb-1">Training</h2>
+            <p className="text-[11px] text-ink-300 mb-3">Tap staff you trained. Add product details below each name.</p>
 
-            <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-3">
-              {trainedStaff.map((s) => {
-                const draft = trainingDrafts[s.staff_id] ?? "";
-                const present = new Set(
-                  draft.split(/[,\n]/).map((p) => p.trim().toLowerCase()).filter(Boolean),
-                );
-                return (
-                  <div key={s.staff_id}>
-                    <label className="text-[11px] font-bold text-ink-500 mb-1 block">{s.name}</label>
-                    <div className="flex flex-wrap gap-1.5 mb-1.5">
-                      {PRODUCT_SUGGESTIONS.map((brand) => {
-                        const added = present.has(brand.toLowerCase());
-                        return (
-                          <button
-                            key={brand}
-                            type="button"
-                            onClick={() => {
-                              if (added) return;
-                              setTrainingDrafts((curr) => {
-                                const existing = curr[s.staff_id] ?? "";
-                                const sep = existing.trim() === "" ? "" : ", ";
-                                return { ...curr, [s.staff_id]: existing + sep + brand };
-                              });
-                            }}
-                            className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold border transition-colors ${
-                              added
-                                ? "bg-[var(--color-tc-50)] border-[var(--color-tc-200)] text-[var(--color-tc-600)]"
-                                : "bg-white border-ink-100 text-ink-500"
-                            }`}
-                          >
-                            {added ? "✓ " : "+ "}{brand}
-                          </button>
-                        );
-                      })}
+            <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-2">
+              {storeStaff === null ? (
+                <p className="text-center text-sm text-ink-300 py-6">Loading staff…</p>
+              ) : storeStaff.length === 0 ? (
+                <p className="text-center text-sm text-ink-300 py-6">No staff on file for this store yet.</p>
+              ) : (
+                storeStaff.map((s) => {
+                  const tagged = taggedStaffIds.has(s.id);
+                  const draft = trainingDrafts[s.id] ?? "";
+                  const present = new Set(
+                    draft.split(/[,\n]/).map((p) => p.trim().toLowerCase()).filter(Boolean),
+                  );
+                  return (
+                    <div key={s.id} className={`rounded-xl border ${tagged ? "border-[var(--color-tc-200)] bg-[var(--color-tc-50)]" : "border-ink-100 bg-white"}`}>
+                      <button
+                        type="button"
+                        onClick={() => toggleStaffTag(s.id)}
+                        className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-semibold"
+                      >
+                        <span className={tagged ? "text-[var(--color-tc-600)]" : "text-ink-700"}>
+                          {tagged ? "✓ " : ""}{s.name}
+                        </span>
+                        <span className="text-[11px] text-ink-300">
+                          {tagged ? "tap to remove" : "tap to tag"}
+                        </span>
+                      </button>
+                      {tagged && (
+                        <div className="px-3 pb-3 pt-1">
+                          <div className="flex flex-wrap gap-1.5 mb-1.5">
+                            {PRODUCT_SUGGESTIONS.map((brand) => {
+                              const added = present.has(brand.toLowerCase());
+                              return (
+                                <button
+                                  key={brand}
+                                  type="button"
+                                  onClick={() => {
+                                    if (added) return;
+                                    setTrainingDrafts((curr) => {
+                                      const existing = curr[s.id] ?? "";
+                                      const sep = existing.trim() === "" ? "" : ", ";
+                                      return { ...curr, [s.id]: existing + sep + brand };
+                                    });
+                                  }}
+                                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold border transition-colors ${
+                                    added
+                                      ? "bg-white border-[var(--color-tc-200)] text-[var(--color-tc-600)]"
+                                      : "bg-white border-ink-100 text-ink-500"
+                                  }`}
+                                >
+                                  {added ? "✓ " : "+ "}{brand}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <textarea
+                            value={draft}
+                            onChange={(e) =>
+                              setTrainingDrafts((curr) => ({ ...curr, [s.id]: e.target.value }))
+                            }
+                            placeholder="Tap a brand above, or type your own"
+                            rows={2}
+                            className="w-full resize-none rounded-lg border border-ink-100 bg-white px-3 py-2 text-[13px] text-ink-700 placeholder:text-ink-300 focus:border-[var(--color-tc-200)] focus:outline-none"
+                          />
+                        </div>
+                      )}
                     </div>
-                    <textarea
-                      value={draft}
-                      onChange={(e) =>
-                        setTrainingDrafts((curr) => ({ ...curr, [s.staff_id]: e.target.value }))
-                      }
-                      placeholder="Tap a brand above, or type your own"
-                      rows={2}
-                      className="w-full resize-none rounded-xl border border-ink-100 bg-ink-50 px-3 py-2 text-[13px] text-ink-700 placeholder:text-ink-300 focus:bg-white focus:border-[var(--color-tc-200)] focus:outline-none"
-                    />
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
+
+              {addingStaff ? (
+                <div className="rounded-xl border border-ink-100 bg-white px-3 py-2.5 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newStaffName}
+                    onChange={(e) => setNewStaffName(e.target.value)}
+                    placeholder="Staff name"
+                    autoFocus
+                    className="flex-1 bg-transparent text-[13px] text-ink-700 placeholder:text-ink-300 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={addNewStaff}
+                    disabled={creatingStaff || !newStaffName.trim()}
+                    className="rounded-full px-3 py-1 text-[11px] font-bold text-white disabled:opacity-50"
+                    style={{ background: "var(--color-tc-600)" }}
+                  >
+                    {creatingStaff ? "Adding…" : "Add"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAddingStaff(false); setNewStaffName(""); }}
+                    className="text-[11px] font-bold text-ink-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAddingStaff(true)}
+                  className="w-full rounded-xl border border-dashed border-ink-200 px-3 py-2.5 text-[12px] font-bold text-ink-500"
+                >
+                  + Add new staff
+                </button>
+              )}
             </div>
 
             <div className="flex gap-2 mt-4">

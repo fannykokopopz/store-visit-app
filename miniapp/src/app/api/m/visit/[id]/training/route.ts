@@ -1,8 +1,8 @@
 import { authedCMFromRequest } from "@/lib/miniapp-auth";
-import { getFullVisitForCM, updateVisitStaffProducts } from "@/lib/queries";
+import { getFullVisitForCM, setVisitTrainedStaff, getStoreStaffForVisit } from "@/lib/queries";
 
-interface UpdatePayload {
-  updates: Array<{ staff_id: string; products: string | null }>;
+interface SetTrainedPayload {
+  trained: Array<{ staff_id: string; products: string | null }>;
 }
 
 export async function PATCH(
@@ -22,24 +22,24 @@ export async function PATCH(
     return Response.json({ error: "Not allowed" }, { status: 403 });
   }
 
-  const body = (await req.json().catch(() => null)) as UpdatePayload | null;
-  if (!body || !Array.isArray(body.updates)) {
+  const body = (await req.json().catch(() => null)) as SetTrainedPayload | null;
+  if (!body || !Array.isArray(body.trained)) {
     return Response.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  const validIds = new Set(visit.trained_staff.map((s) => s.staff_id));
-  const clean = body.updates
-    .filter((u) => u && typeof u.staff_id === "string" && validIds.has(u.staff_id))
-    .map((u) => ({
-      staff_id: u.staff_id,
-      products: typeof u.products === "string" ? u.products : null,
+  // Only allow staff that belong to this visit's store.
+  const storeStaff = await getStoreStaffForVisit(id);
+  if (!storeStaff) return Response.json({ error: "Failed to load staff" }, { status: 500 });
+  const validIds = new Set(storeStaff.map((s) => s.id));
+
+  const clean = body.trained
+    .filter((t) => t && typeof t.staff_id === "string" && validIds.has(t.staff_id))
+    .map((t) => ({
+      staff_id: t.staff_id,
+      products: typeof t.products === "string" ? t.products : null,
     }));
 
-  if (clean.length === 0) {
-    return Response.json({ error: "No valid updates" }, { status: 400 });
-  }
-
-  const ok = await updateVisitStaffProducts(id, clean);
+  const ok = await setVisitTrainedStaff(id, clean);
   if (!ok) return Response.json({ error: "Update failed" }, { status: 500 });
   return Response.json({ ok: true });
 }

@@ -524,6 +524,86 @@ export async function updateVisitStaffProducts(
   return true;
 }
 
+export interface StoreStaff {
+  id: string;
+  name: string;
+}
+
+export async function getStoreStaffForVisit(visitId: string): Promise<StoreStaff[] | null> {
+  const { data: visit, error: vErr } = await supabase
+    .from("visits")
+    .select("store_id")
+    .eq("id", visitId)
+    .single();
+  if (vErr || !visit) return null;
+
+  const { data, error } = await supabase
+    .from("staff")
+    .select("id, name")
+    .eq("store_id", visit.store_id)
+    .order("name", { ascending: true });
+  if (error) {
+    console.error("getStoreStaffForVisit error:", error);
+    return null;
+  }
+  return (data ?? []).map((s) => ({ id: s.id as string, name: s.name as string }));
+}
+
+export async function setVisitTrainedStaff(
+  visitId: string,
+  trained: Array<{ staff_id: string; products: string | null }>,
+): Promise<boolean> {
+  // Delete existing trained rows for this visit, then insert the new set.
+  const { error: delErr } = await supabase
+    .from("visit_staff")
+    .delete()
+    .eq("visit_id", visitId);
+  if (delErr) {
+    console.error("setVisitTrainedStaff delete error:", delErr);
+    return false;
+  }
+
+  if (trained.length === 0) return true;
+
+  const rows = trained.map((t) => ({
+    visit_id: visitId,
+    staff_id: t.staff_id,
+    was_trained: true,
+    products_trained_on: t.products && t.products.trim() ? t.products.trim() : null,
+  }));
+  const { error: insErr } = await supabase.from("visit_staff").insert(rows);
+  if (insErr) {
+    console.error("setVisitTrainedStaff insert error:", insErr);
+    return false;
+  }
+  return true;
+}
+
+export async function createStoreStaff(storeId: string, name: string): Promise<StoreStaff | null> {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const { data, error } = await supabase
+    .from("staff")
+    .insert({ store_id: storeId, name: trimmed })
+    .select("id, name")
+    .single();
+  if (error || !data) {
+    console.error("createStoreStaff error:", error);
+    return null;
+  }
+  return { id: data.id as string, name: data.name as string };
+}
+
+export async function getStoreIdForVisit(visitId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("visits")
+    .select("store_id")
+    .eq("id", visitId)
+    .single();
+  if (error || !data) return null;
+  return data.store_id as string;
+}
+
 export async function updateVisitText(
   telegramId: number,
   visitId: string,

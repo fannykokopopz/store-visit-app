@@ -291,6 +291,12 @@ export function createBot(): Bot<BotContext> {
     }
   });
 
+  // Dismiss the "Log training details" prompt sent after Step 3 Yes
+  bot.callbackQuery(/^training:dismiss:/, async (ctx) => {
+    await ctx.answerCallbackQuery('Add it later from the visit page 👍');
+    await ctx.deleteMessage().catch(() => {});
+  });
+
   // Cancel delete confirmation
   bot.callbackQuery('cancel_action', async (ctx) => {
     await ctx.answerCallbackQuery('Cancelled.');
