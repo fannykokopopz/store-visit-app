@@ -34,6 +34,9 @@ export interface VisitSummary {
 export interface AllMarketStore extends Store {
   last_visit_date: string | null;
   last_visit_cm: string | null;
+  is_assigned?: boolean;
+  last_visit_by_you?: string | null;
+  last_visit_by_team?: { date: string; cm_name: string } | null;
 }
 
 export interface SearchResult {
@@ -220,7 +223,10 @@ export async function getStoreTimelineForCM(
   return { store, visits };
 }
 
-export async function getAllStoresInMarket(market: string): Promise<AllMarketStore[]> {
+export async function getAllStoresInMarket(
+  market: string,
+  currentCmTelegramId?: number,
+): Promise<AllMarketStore[]> {
   const { data: storeRows } = await supabase
     .from("stores")
     .select("*")
@@ -230,32 +236,79 @@ export async function getAllStoresInMarket(market: string): Promise<AllMarketSto
 
   if (!storeRows || storeRows.length === 0) return [];
 
-  const storeIds = storeRows.map((s: any) => s.id); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const { data: visitRows } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const storeIds = storeRows.map((s: any) => s.id) as string[];
+
+  const visitsP = supabase
     .from("visits")
-    .select("store_id, visit_date, created_at, cms!cm_telegram_id(full_name, nickname)")
+    .select("id, store_id, visit_date, created_at, cm_telegram_id, cms!cm_telegram_id(full_name, nickname)")
     .in("store_id", storeIds)
     .eq("is_locked", true)
     .order("visit_date", { ascending: false })
     .order("created_at", { ascending: false });
 
+  const myVisitsP = currentCmTelegramId !== undefined
+    ? supabase
+        .from("visits")
+        .select("store_id, visit_date, visit_cms!inner(cm_telegram_id)")
+        .eq("visit_cms.cm_telegram_id", currentCmTelegramId)
+        .in("store_id", storeIds)
+        .eq("is_locked", true)
+        .order("visit_date", { ascending: false })
+        .order("created_at", { ascending: false })
+    : Promise.resolve({ data: [] as unknown[] });
+
+  const assignmentsP = currentCmTelegramId !== undefined
+    ? supabase
+        .from("cm_store_assignments")
+        .select("store_id")
+        .eq("cm_telegram_id", currentCmTelegramId)
+        .eq("is_active", true)
+    : Promise.resolve({ data: [] as unknown[] });
+
+  const [visitsRes, myVisitsRes, assignRes] = await Promise.all([visitsP, myVisitsP, assignmentsP]);
+
+  // Overall last visit (any CM)
   const lastVisitByStore = new Map<string, { date: string; cm_name: string }>();
-  for (const v of visitRows ?? []) {
+  // Last visit where lead CM != me
+  const lastTeamByStore = new Map<string, { date: string; cm_name: string }>();
+  for (const v of visitsRes.data ?? []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const row = v as any;
+    const cmName = row.cms?.nickname ?? row.cms?.full_name ?? "Unknown";
     if (!lastVisitByStore.has(row.store_id)) {
-      lastVisitByStore.set(row.store_id, {
-        date: row.visit_date,
-        cm_name: row.cms?.nickname ?? row.cms?.full_name ?? "Unknown",
-      });
+      lastVisitByStore.set(row.store_id, { date: row.visit_date, cm_name: cmName });
+    }
+    if (
+      currentCmTelegramId !== undefined &&
+      Number(row.cm_telegram_id) !== currentCmTelegramId &&
+      !lastTeamByStore.has(row.store_id)
+    ) {
+      lastTeamByStore.set(row.store_id, { date: row.visit_date, cm_name: cmName });
     }
   }
+
+  // My last visit per store
+  const myLastByStore = new Map<string, string>();
+  for (const v of myVisitsRes.data ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = v as any;
+    if (!myLastByStore.has(row.store_id)) myLastByStore.set(row.store_id, row.visit_date);
+  }
+
+  const assignedSet = new Set(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((assignRes.data ?? []) as any[]).map((a) => a.store_id as string),
+  );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return storeRows.map((s: any) => ({
     ...(s as Store),
     last_visit_date: lastVisitByStore.get(s.id)?.date ?? null,
     last_visit_cm: lastVisitByStore.get(s.id)?.cm_name ?? null,
+    is_assigned: assignedSet.has(s.id),
+    last_visit_by_you: myLastByStore.get(s.id) ?? null,
+    last_visit_by_team: lastTeamByStore.get(s.id) ?? null,
   })).sort((a, b) => {
     if (a.last_visit_date && b.last_visit_date) return b.last_visit_date.localeCompare(a.last_visit_date);
     if (a.last_visit_date) return -1;
