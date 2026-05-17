@@ -121,55 +121,60 @@ function describeFilter(f: AppliedFilter): string {
 
 export default function StatsPage() {
   const [whoami, setWhoami] = useState<Whoami | null>(null);
-  const [activity, setActivity] = useState<Activity | null>(null);
+  const [allActivity, setAllActivity] = useState<Activity | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [appliedFilter] = useState<AppliedFilter>({ mode: "preset", preset: "lifetime" });
+  const [appliedFilter, setAppliedFilter] = useState<AppliedFilter>({ mode: "preset", preset: "lifetime" });
   const [visitsOpen, setVisitsOpen] = useState(true);
   const [trainingsOpen, setTrainingsOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
 
-  // Load whoami once
+  // Load whoami + lifetime activity once
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         await initTelegram();
         const initData = window.Telegram?.WebApp?.initData ?? "";
-        const res = await fetch("/api/m/whoami", { headers: { "x-tg-init-data": initData } });
-        if (!res.ok) throw new Error(`whoami: ${res.status}`);
-        const json: Whoami = await res.json();
-        if (!cancelled) setWhoami(json);
+        const headers = { "x-tg-init-data": initData };
+        const [whoamiRes, activityRes] = await Promise.all([
+          fetch("/api/m/whoami", { headers }),
+          fetch("/api/m/stats/activity", { headers }),
+        ]);
+        if (!whoamiRes.ok) throw new Error(`whoami: ${whoamiRes.status}`);
+        if (!activityRes.ok) throw new Error(`activity: ${activityRes.status}`);
+        const whoamiJson: Whoami = await whoamiRes.json();
+        const activityJson: Activity = await activityRes.json();
+        if (!cancelled) {
+          setWhoami(whoamiJson);
+          setAllActivity(activityJson);
+        }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load profile");
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
       }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  // Refetch activity when filter changes
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        await initTelegram();
-        const initData = window.Telegram?.WebApp?.initData ?? "";
-        const [from, to] = filterRange(appliedFilter);
-        const params = new URLSearchParams();
-        if (from) params.set("from", from);
-        if (to) params.set("to", to);
-        const url = `/api/m/stats/activity${params.toString() ? `?${params}` : ""}`;
-        const res = await fetch(url, { headers: { "x-tg-init-data": initData } });
-        if (!res.ok) throw new Error(`activity: ${res.status}`);
-        const json: Activity = await res.json();
-        if (!cancelled) setActivity(json);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load activity");
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [appliedFilter]);
-
   const displayName = whoami?.nickname ?? whoami?.name ?? "—";
   const roleLabel = whoami ? whoami.role.toUpperCase() : "";
+
+  // Apply filter client-side
+  const activity = useMemo<Activity | null>(() => {
+    if (!allActivity) return null;
+    const [from, to] = filterRange(appliedFilter);
+    const inRange = (date: string) => (!from || date >= from) && (!to || date <= to);
+    if (appliedFilter.mode === "weeks") {
+      const weekSet = new Set(appliedFilter.weeks);
+      return {
+        visits: allActivity.visits.filter((v) => weekSet.has(weekStart(v.date))),
+        trainings: allActivity.trainings.filter((t) => weekSet.has(weekStart(t.date))),
+      };
+    }
+    return {
+      visits: allActivity.visits.filter((v) => inRange(v.date)),
+      trainings: allActivity.trainings.filter((t) => inRange(t.date)),
+    };
+  }, [allActivity, appliedFilter]);
 
   const totals = useMemo(() => {
     if (!activity) return { visitCount: 0, storesCovered: 0, trainStaff: 0, trainSessions: 0 };
@@ -223,13 +228,13 @@ export default function StatsPage() {
         <div className="mx-[14px] mt-1 mb-3">
           <button
             type="button"
-            disabled
-            className={`w-full flex items-center justify-between rounded-xl px-3 py-2 border shadow-[0_1px_3px_rgba(0,0,0,0.04)] cursor-not-allowed ${
+            onClick={() => setFilterOpen(true)}
+            className={`w-full flex items-center justify-between rounded-xl px-3 py-2 border shadow-[0_1px_3px_rgba(0,0,0,0.04)] ${
               filterActive
                 ? "border-[var(--color-tc-400)] bg-[var(--color-tc-50)]"
                 : "border-[var(--color-ink-100)] bg-white"
             }`}
-            aria-label="Filter (coming soon)"
+            aria-label="Change filter"
           >
             <div className="text-left">
               <div className="text-[8px] font-bold uppercase tracking-widest text-[var(--color-ink-300)]">Showing</div>
@@ -271,6 +276,15 @@ export default function StatsPage() {
           <div className="py-10 text-center text-[var(--color-ink-300)] text-sm">Loading…</div>
         )}
       </div>
+
+      {filterOpen && allActivity && (
+        <FilterPopup
+          allActivity={allActivity}
+          applied={appliedFilter}
+          onApply={(f) => { setAppliedFilter(f); setFilterOpen(false); }}
+          onClose={() => setFilterOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -382,6 +396,181 @@ function Timeline({ items, kind }: { items: TimelineEntry[]; kind: "visit" | "tr
           </div>
         );
       })}
+    </>
+  );
+}
+
+// ── Filter popup ─────────────────────────────────────────────────────────────
+
+const PRESETS: { key: Preset; label: string }[] = [
+  { key: "lifetime", label: "Lifetime" },
+  { key: "this-week", label: "This week" },
+  { key: "this-month", label: "This month" },
+  { key: "last-month", label: "Last month" },
+  { key: "quarter", label: "This quarter" },
+];
+
+function FilterPopup({
+  allActivity,
+  applied,
+  onApply,
+  onClose,
+}: {
+  allActivity: Activity;
+  applied: AppliedFilter;
+  onApply: (f: AppliedFilter) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState<AppliedFilter>(applied);
+
+  // Derive available weeks: every week from oldest activity → current week, sorted newest first
+  const weeks = useMemo(() => {
+    const set = new Set<string>();
+    for (const v of allActivity.visits) set.add(weekStart(v.date));
+    for (const t of allActivity.trainings) set.add(weekStart(t.date));
+    set.add(weekStart(todayISO()));
+    return Array.from(set).sort().reverse();
+  }, [allActivity]);
+
+  // Activity counts per week
+  const countsByWeek = useMemo(() => {
+    const m = new Map<string, { visits: number; trainings: number }>();
+    for (const wk of weeks) m.set(wk, { visits: 0, trainings: 0 });
+    for (const v of allActivity.visits) {
+      const wk = weekStart(v.date);
+      const c = m.get(wk); if (c) c.visits += 1;
+    }
+    for (const t of allActivity.trainings) {
+      const wk = weekStart(t.date);
+      const c = m.get(wk); if (c) c.trainings += 1;
+    }
+    return m;
+  }, [allActivity, weeks]);
+
+  const selectedSet = draft.mode === "weeks" ? new Set(draft.weeks) : new Set<string>();
+  const hasWeeks = draft.mode === "weeks" && draft.weeks.length > 0;
+
+  function selectPreset(p: Preset) { setDraft({ mode: "preset", preset: p }); }
+  function toggleWeek(wk: string) {
+    if (draft.mode !== "weeks") {
+      setDraft({ mode: "weeks", weeks: [wk] });
+      return;
+    }
+    const i = draft.weeks.indexOf(wk);
+    const next = i >= 0
+      ? draft.weeks.filter((w) => w !== wk)
+      : [...draft.weeks, wk];
+    if (next.length === 0) setDraft({ mode: "preset", preset: "lifetime" });
+    else setDraft({ mode: "weeks", weeks: next });
+  }
+  function clearWeeks() { setDraft({ mode: "preset", preset: "lifetime" }); }
+
+  const today = weekStart(todayISO());
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 bg-black/40 z-[150]"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.4)] w-[320px] max-h-[80vh] z-[200] flex flex-col overflow-hidden"
+      >
+        <div className="px-[18px] pt-4 pb-3 border-b border-[var(--color-ink-100)] flex-shrink-0">
+          <div className="text-[15px] font-extrabold text-[var(--color-ink-700)] tracking-tight">Show activity for</div>
+          <div className="text-[11px] text-[var(--color-ink-500)] mt-0.5 font-medium">{describeFilter(draft)}</div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-3">
+          <div className="px-[18px] pb-2 text-[9px] font-extrabold text-[var(--color-ink-300)] uppercase tracking-wider">
+            Quick presets
+          </div>
+          <div className="px-[18px] pb-2.5 flex flex-wrap gap-1.5">
+            {PRESETS.map((p) => {
+              const selected = draft.mode === "preset" && draft.preset === p.key;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => selectPreset(p.key)}
+                  className={`text-[11px] font-bold rounded-full px-2.5 py-1.5 border ${
+                    selected
+                      ? "bg-[var(--color-tc-50)] text-[var(--color-ink-700)] border-[var(--color-tc-100)]"
+                      : "bg-[var(--color-ink-50)] text-[var(--color-ink-700)] border-transparent"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="h-px bg-[var(--color-ink-100)] mx-[18px] my-1" />
+
+          <div className="px-[18px] pt-2 pb-2 flex items-center justify-between">
+            <span className="text-[9px] font-extrabold text-[var(--color-ink-300)] uppercase tracking-wider">Pick specific weeks</span>
+            <button
+              type="button"
+              onClick={clearWeeks}
+              disabled={!hasWeeks}
+              className={`text-[10px] font-bold ${hasWeeks ? "text-[var(--color-tc-400)]" : "text-[var(--color-ink-300)]"}`}
+            >
+              Clear
+            </button>
+          </div>
+
+          <div>
+            {weeks.map((wk) => {
+              const isSelected = selectedSet.has(wk);
+              const counts = countsByWeek.get(wk) ?? { visits: 0, trainings: 0 };
+              const isThisWeek = wk === today;
+              const metaParts: string[] = [];
+              if (counts.visits > 0) metaParts.push(`${counts.visits}v`);
+              if (counts.trainings > 0) metaParts.push(`${counts.trainings}t`);
+              const meta = isThisWeek ? "This week" : (metaParts.join(" · ") || "—");
+              return (
+                <button
+                  key={wk}
+                  type="button"
+                  onClick={() => toggleWeek(wk)}
+                  className={`w-full flex items-center gap-2.5 px-[18px] py-2.5 text-left ${isSelected ? "bg-[var(--color-tc-50)]" : "hover:bg-[var(--color-ink-50)]"}`}
+                >
+                  <div className={`w-[18px] h-[18px] rounded-md flex items-center justify-center flex-shrink-0 text-[11px] font-black ${
+                    isSelected
+                      ? "bg-[var(--color-tc-400)] border-[var(--color-tc-400)] text-white"
+                      : "bg-white border-[1.5px] border-[var(--color-ink-200)]"
+                  }`}>{isSelected && "✓"}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-bold text-[var(--color-ink-700)] leading-tight">Week {isoWeek(wk)}</div>
+                    <div className="text-[10px] font-medium text-[var(--color-ink-500)] mt-px">{weekRangeLabel(wk)}</div>
+                  </div>
+                  <div className="text-[9px] font-bold text-[var(--color-ink-300)] uppercase tracking-wider flex-shrink-0">{meta}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="px-[18px] py-3 border-t border-[var(--color-ink-100)] flex gap-2 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-[12px] font-bold bg-[var(--color-ink-50)] text-[var(--color-ink-700)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => onApply(draft)}
+            className="flex-1 py-2.5 rounded-xl text-[12px] font-bold bg-[var(--color-ink-700)] text-white"
+          >
+            Apply
+          </button>
+        </div>
+      </div>
     </>
   );
 }
