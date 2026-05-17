@@ -250,7 +250,7 @@ export async function getAllStoresInMarket(
   const myVisitsP = currentCmTelegramId !== undefined
     ? supabase
         .from("visits")
-        .select("store_id, visit_date, visit_cms!inner(cm_telegram_id)")
+        .select("id, store_id, visit_date, visit_cms!inner(cm_telegram_id)")
         .eq("visit_cms.cm_telegram_id", currentCmTelegramId)
         .in("store_id", storeIds)
         .eq("is_locked", true)
@@ -268,9 +268,20 @@ export async function getAllStoresInMarket(
 
   const [visitsRes, myVisitsRes, assignRes] = await Promise.all([visitsP, myVisitsP, assignmentsP]);
 
+  // Visit IDs the current CM participated in (lead OR co-CM) — so we can
+  // exclude them from "last team visit" even when someone else was lead.
+  const myVisitIds = new Set<string>();
+  const myLastByStore = new Map<string, string>();
+  for (const v of myVisitsRes.data ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = v as any;
+    if (row.id) myVisitIds.add(row.id as string);
+    if (!myLastByStore.has(row.store_id)) myLastByStore.set(row.store_id, row.visit_date);
+  }
+
   // Overall last visit (any CM)
   const lastVisitByStore = new Map<string, { date: string; cm_name: string }>();
-  // Last visit where lead CM != me
+  // Last visit where I had no involvement at all (neither lead nor co-CM)
   const lastTeamByStore = new Map<string, { date: string; cm_name: string }>();
   for (const v of visitsRes.data ?? []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -279,21 +290,9 @@ export async function getAllStoresInMarket(
     if (!lastVisitByStore.has(row.store_id)) {
       lastVisitByStore.set(row.store_id, { date: row.visit_date, cm_name: cmName });
     }
-    if (
-      currentCmTelegramId !== undefined &&
-      Number(row.cm_telegram_id) !== currentCmTelegramId &&
-      !lastTeamByStore.has(row.store_id)
-    ) {
+    if (currentCmTelegramId !== undefined && !myVisitIds.has(row.id) && !lastTeamByStore.has(row.store_id)) {
       lastTeamByStore.set(row.store_id, { date: row.visit_date, cm_name: cmName });
     }
-  }
-
-  // My last visit per store
-  const myLastByStore = new Map<string, string>();
-  for (const v of myVisitsRes.data ?? []) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const row = v as any;
-    if (!myLastByStore.has(row.store_id)) myLastByStore.set(row.store_id, row.visit_date);
   }
 
   const assignedSet = new Set(

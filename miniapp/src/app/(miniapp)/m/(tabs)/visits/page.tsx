@@ -505,7 +505,7 @@ function PortfolioContent() {
 
       {/* Search overlay */}
       {searchOpen && (
-        <div className="fixed inset-0 z-40 bg-[var(--color-ink-50)] flex flex-col">
+        <div className="fixed inset-0 z-[60] bg-[var(--color-ink-50)] flex flex-col">
           {/* Search header */}
           <div className="bg-white border-b border-ink-100 px-4 pt-5 pb-3">
             <div className="flex items-center gap-3">
@@ -643,8 +643,8 @@ function PortfolioContent() {
       {/* Settings bottom sheet */}
       {settingsOpen && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setSettingsOpen(false)} />
-          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-xl">
+          <div className="fixed inset-0 z-[60] bg-black/40" onClick={() => setSettingsOpen(false)} />
+          <div className="fixed bottom-0 left-0 right-0 z-[61] bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-xl">
             <div className="w-8 h-1 bg-ink-200 rounded-full mx-auto mb-5" />
             <h2 className="text-base font-extrabold text-ink-700 mb-4">Settings</h2>
 

@@ -14,14 +14,7 @@ interface Store {
   last_visit_by_team: { date: string; cm_name: string } | null;
 }
 
-interface CM {
-  name: string;
-  nickname: string | null;
-  market: string;
-}
-
 interface StoresPayload {
-  cm: CM;
   stores: Store[];
 }
 
