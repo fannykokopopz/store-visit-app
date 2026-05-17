@@ -368,3 +368,140 @@ export async function setAllyStatus(staffId: string, isAlly: boolean): Promise<b
     .eq("id", staffId);
   return !error;
 }
+
+export interface PayrollGrid {
+  weeks: { start: string; end: string }[]; // ISO Monday → Sunday, oldest → newest
+  rows: {
+    telegram_id: number;
+    full_name: string;
+    nickname: string | null;
+    market: 'SG' | 'MY' | 'TH' | 'HK';
+    am_name: string | null;
+    counts: number[]; // length = weeks.length
+    range_total: number;
+  }[];
+  co_credit_active: boolean;
+  range: { from: string; to: string };
+}
+
+function isoDate(d: Date): string { return d.toISOString().slice(0, 10); }
+
+function mondayOf(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const dow = d.getDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function buildWeeks(fromISO: string, toISO: string): { start: string; end: string }[] {
+  const start = mondayOf(new Date(fromISO + 'T00:00:00'));
+  const to = new Date(toISO + 'T00:00:00');
+  const weeks: { start: string; end: string }[] = [];
+  const cursor = new Date(start);
+  // Safety cap so a typo can't produce millions of weeks
+  const MAX_WEEKS = 60;
+  let safety = 0;
+  while (cursor <= to && safety < MAX_WEEKS) {
+    const wStart = new Date(cursor);
+    const wEnd = new Date(cursor); wEnd.setDate(cursor.getDate() + 6);
+    weeks.push({ start: isoDate(wStart), end: isoDate(wEnd) });
+    cursor.setDate(cursor.getDate() + 7);
+    safety += 1;
+  }
+  return weeks;
+}
+
+export async function getPayrollGrid(fromISO: string, toISO: string): Promise<PayrollGrid> {
+  const weeks = buildWeeks(fromISO, toISO);
+  if (weeks.length === 0) {
+    return { weeks: [], rows: [], co_credit_active: false, range: { from: fromISO, to: toISO } };
+  }
+  const windowStartISO = weeks[0].start;
+  const windowEndISO = weeks[weeks.length - 1].end;
+
+  // CMs: only those whose role earns payroll attribution (cm + cmic). AMs/admins excluded from rows.
+  const { data: cmsRaw } = await supabase
+    .from('cms')
+    .select('telegram_id, full_name, role, market, am_telegram_id, is_active')
+    .eq('is_active', true);
+  const allCms = (cmsRaw ?? []) as unknown as {
+    telegram_id: number;
+    full_name: string;
+    role: 'cm' | 'cmic' | 'am' | 'admin';
+    market: 'SG' | 'MY' | 'TH' | 'HK';
+    am_telegram_id: number | null;
+    is_active: boolean;
+  }[];
+  const cmsById = new Map(allCms.map((c) => [c.telegram_id, c]));
+  const payrollCms = allCms.filter((c) => c.role === 'cm' || c.role === 'cmic');
+  if (payrollCms.length === 0) {
+    return { weeks, rows: [], co_credit_active: false, range: { from: windowStartISO, to: windowEndISO } };
+  }
+
+  // Visits in window
+  const { data: visitsRaw } = await supabase
+    .from('visits')
+    .select('id, visit_date, cm_telegram_id')
+    .eq('is_locked', true)
+    .gte('visit_date', windowStartISO)
+    .lte('visit_date', windowEndISO);
+  const visits = (visitsRaw ?? []) as { id: string; visit_date: string; cm_telegram_id: number }[];
+
+  // Co-CM tagging via visit_cms — fall back gracefully if migration not applied
+  let coCreditActive = false;
+  let coCreditByVisit: Map<string, Set<number>> | null = null;
+  if (visits.length > 0) {
+    const { data: vcRaw, error: vcErr } = await supabase
+      .from('visit_cms')
+      .select('visit_id, cm_telegram_id')
+      .in('visit_id', visits.map((v) => v.id));
+    if (!vcErr && vcRaw && vcRaw.length > 0) {
+      coCreditActive = true;
+      coCreditByVisit = new Map();
+      for (const link of vcRaw as { visit_id: string; cm_telegram_id: number }[]) {
+        const set = coCreditByVisit.get(link.visit_id) ?? new Set<number>();
+        set.add(link.cm_telegram_id);
+        coCreditByVisit.set(link.visit_id, set);
+      }
+    }
+  }
+
+  // Build week index keyed by Monday ISO
+  const weekIdx = new Map(weeks.map((w, i) => [w.start, i]));
+  const cellCounts = new Map<number, number[]>();
+  for (const c of payrollCms) cellCounts.set(c.telegram_id, new Array(weeks.length).fill(0));
+
+  for (const v of visits) {
+    const mon = mondayOf(new Date(v.visit_date + 'T00:00:00'));
+    const idx = weekIdx.get(isoDate(mon));
+    if (idx === undefined) continue;
+    const credited = coCreditByVisit?.get(v.id) ?? new Set<number>([v.cm_telegram_id]);
+    for (const cmId of credited) {
+      const row = cellCounts.get(cmId);
+      if (!row) continue; // skip non-payroll CMs (AM/admin) even if tagged
+      row[idx] += 1;
+    }
+  }
+
+  const rows = payrollCms.map((c) => {
+    const counts = cellCounts.get(c.telegram_id) ?? new Array(weeks.length).fill(0);
+    const am = c.am_telegram_id ? cmsById.get(c.am_telegram_id) : null;
+    return {
+      telegram_id: c.telegram_id,
+      full_name: c.full_name,
+      nickname: null,
+      market: c.market,
+      am_name: am?.full_name ?? null,
+      counts,
+      range_total: counts.reduce((a, b) => a + b, 0),
+    };
+  }).sort((a, b) => {
+    const amCmp = (a.am_name ?? 'ZZZ').localeCompare(b.am_name ?? 'ZZZ');
+    if (amCmp !== 0) return amCmp;
+    return a.full_name.localeCompare(b.full_name);
+  });
+
+  return { weeks, rows, co_credit_active: coCreditActive, range: { from: windowStartISO, to: windowEndISO } };
+}

@@ -349,3 +349,181 @@ body {
   font-size: 13px; color: var(--color-ink-300);
 }
 .empty-state-icon { font-size: 32px; margin-bottom: 12px; }
+
+/* ── Monthly payroll grid ───────────────────────────────── */
+.payroll-note {
+  font-size: 11px; color: var(--color-ink-400); font-weight: 500;
+  margin-left: 4px;
+}
+.payroll-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 32px;
+}
+.payroll-scroll { overflow-x: auto; }
+table.payroll-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 720px;
+}
+table.payroll-grid thead th {
+  background: var(--color-ink-50);
+  padding: 11px 12px;
+  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--color-ink-500);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+table.payroll-grid thead th.month-col {
+  text-align: center;
+  border-left: 1px solid var(--color-border);
+}
+table.payroll-grid thead th.month-col.current {
+  background: var(--color-tc-50);
+  color: var(--color-tc-600);
+}
+table.payroll-grid thead th.total-col {
+  text-align: center;
+  background: var(--color-ink-100);
+  border-left: 2px solid var(--color-border-strong);
+}
+table.payroll-grid tbody td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-variant-numeric: tabular-nums;
+}
+table.payroll-grid tbody td.cm-cell {
+  font-weight: 700;
+  color: var(--color-ink-900);
+}
+table.payroll-grid tbody td.month-col {
+  text-align: center;
+  border-left: 1px solid var(--color-border);
+  font-weight: 700;
+  color: var(--color-ink-900);
+}
+table.payroll-grid tbody td.month-col.current {
+  background: var(--color-tc-50);
+  color: var(--color-tc-600);
+}
+table.payroll-grid tbody td.month-col.zero {
+  color: var(--color-ink-300);
+  font-weight: 500;
+}
+table.payroll-grid tbody td.total-col {
+  text-align: center;
+  background: var(--color-ink-50);
+  font-weight: 800;
+  color: var(--color-ink-900);
+  border-left: 2px solid var(--color-border-strong);
+}
+table.payroll-grid tbody tr.am-row td {
+  background: var(--color-ink-50);
+  color: var(--color-ink-500);
+  font-weight: 700;
+  font-size: 11px;
+  padding: 9px 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+table.payroll-grid tbody tr.am-row td.am-label {
+  font-style: italic;
+  text-align: left;
+}
+table.payroll-grid tbody tr.am-row td.am-week {
+  text-align: center;
+  border-left: 1px solid var(--color-border);
+  font-style: normal;
+  color: var(--color-ink-700);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 700;
+}
+table.payroll-grid tbody tr.am-row td.am-total {
+  text-align: center;
+  border-left: 2px solid var(--color-border-strong);
+  background: var(--color-ink-100);
+  font-style: normal;
+  color: var(--color-ink-900);
+  font-weight: 800;
+  text-transform: none;
+  letter-spacing: 0;
+}
+table.payroll-grid tbody tr.overall-row td {
+  background: var(--color-tc-50);
+  color: var(--color-tc-600);
+  font-weight: 800;
+  border-top: 2px solid var(--color-border-strong);
+  border-bottom: none;
+}
+table.payroll-grid tbody tr.overall-row td.cm-cell {
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+table.payroll-grid tbody tr.overall-row td.month-col,
+table.payroll-grid tbody tr.overall-row td.total-col {
+  background: var(--color-tc-50);
+  color: var(--color-tc-600);
+}
+table.payroll-grid .market-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+table.payroll-grid tbody tr:last-child td { border-bottom: none; }
+.payroll-card.loading { opacity: 0.6; transition: opacity 0.2s; }
+
+/* ── Range picker bar ───────────────────────────────────── */
+.range-bar {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+.range-bar .chip-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.range-inputs {
+  display: inline-flex;
+  gap: 12px;
+}
+.range-label {
+  display: inline-flex;
+  flex-direction: column;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-ink-400);
+  gap: 4px;
+}
+.range-label input[type="date"] {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-900);
+  font-family: inherit;
+}
+.range-label input[type="date"]:focus {
+  outline: none;
+  border-color: var(--color-tc-500);
+  box-shadow: 0 0 0 3px var(--color-tc-50);
+}
