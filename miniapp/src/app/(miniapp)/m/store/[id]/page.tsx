@@ -248,9 +248,17 @@ function VisitCard({
             <span className="text-[11px] text-ink-300 truncate">{visit.cm_name}</span>
           )}
         </div>
-        {visit.photo_count > 0 && (
-          <span className="text-[11px] text-ink-300 shrink-0">📸 {visit.photo_count}</span>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {visit.photo_count > 0 && (
+            <span className="text-[11px] text-ink-300">📸 {visit.photo_count}</span>
+          )}
+          <Link
+            href={`/m/visit/${visit.id}/edit`}
+            className="rounded-lg bg-ink-50 px-2.5 py-1 text-[11px] font-bold text-ink-400 active:bg-ink-100"
+          >
+            Edit
+          </Link>
+        </div>
       </div>
       {visit.grade_comments && (
         <p className="mb-3 whitespace-pre-wrap text-[12px] leading-relaxed text-ink-400">

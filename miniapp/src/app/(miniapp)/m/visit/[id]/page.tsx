@@ -339,12 +339,10 @@ export default function VisitPage({
           <div className="min-w-0">
             <h1 className="text-xl font-extrabold text-ink-700 leading-tight">
               {fmtDate(visit.visit_date)}
+              {visit.edited_at && (
+                <span className="ml-2 align-middle text-[10px] font-semibold uppercase tracking-wider text-ink-300">edited</span>
+              )}
             </h1>
-            <p className="text-xs text-ink-300 mt-0.5">
-              {visit.store_name}
-              {visit.edited_at && <> · edited</>}
-              {" · "}{filled.length}/6 sections
-            </p>
             {visit.grade && (
               <div className="mt-2">
                 <span
