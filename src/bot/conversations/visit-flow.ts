@@ -308,22 +308,30 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
     }
   }
 
-  // Render the comment-stage message. Keep grade buttons available so the user
-  // can re-tap if they hit the wrong one. Skip is on the left (secondary).
-  async function renderGradeCommentPrompt(g: 1 | 2 | 3) {
+  // Render the comment-stage message. Two modes:
+  //   'idle'     → [Skip] [Change]              (default after grading)
+  //   'changing' → [Back] [1] [2] [3]           (only after tapping Change)
+  // Typing a comment always commits and ends, regardless of mode.
+  async function renderGradeCommentPrompt(g: 1 | 2 | 3, mode: 'idle' | 'changing' = 'idle') {
+    const text = mode === 'idle'
+      ? `📊 *Grade ${g}* — Add a Comment?\n\nType a comment, or tap Skip. Tap Change to update the grade.`
+      : `📊 *Grade ${g}* — Change Grade\n\nTap a new grade, or Back to keep Grade ${g}.`;
+    const keyboard = mode === 'idle'
+      ? new InlineKeyboard()
+          .text('Skip', 'grade:skip-comments')
+          .text('Change', 'grade:change')
+      : new InlineKeyboard()
+          .text('Back', 'grade:change-back')
+          .text('1', 'grade:1').text('2', 'grade:2').text('3', 'grade:3');
     await ctx.api.editMessageText(
       gradeMsg.chat.id,
       gradeMsg.message_id,
-      `📊 *Grade ${g}* — Add a Comment?\n\nType a comment, or tap Skip. Tap 1/2/3 to change the grade.`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: new InlineKeyboard()
-          .text('Skip', 'grade:skip-comments')
-          .text('1', 'grade:1').text('2', 'grade:2').text('3', 'grade:3'),
-      },
+      text,
+      { parse_mode: 'Markdown', reply_markup: keyboard },
     ).catch(() => {});
   }
-  await renderGradeCommentPrompt(grade);
+  let commentMode: 'idle' | 'changing' = 'idle';
+  await renderGradeCommentPrompt(grade, commentMode);
 
   let gradeComments: string | null = null;
   let commentsDone = false;
@@ -349,16 +357,26 @@ export async function visitFlow(conversation: VisitConversation, ctx: BotContext
         commentsDone = true;
         break;
       }
+      if (data === 'grade:change') {
+        commentMode = 'changing';
+        await upd.answerCallbackQuery().catch(() => {});
+        await renderGradeCommentPrompt(grade, commentMode);
+        continue;
+      }
+      if (data === 'grade:change-back') {
+        commentMode = 'idle';
+        await upd.answerCallbackQuery().catch(() => {});
+        await renderGradeCommentPrompt(grade, commentMode);
+        continue;
+      }
       const m = data.match(/^grade:([1-3])$/);
       if (m) {
         const newGrade = Number(m[1]) as 1 | 2 | 3;
-        if (newGrade !== grade) {
-          grade = newGrade;
-          await upd.answerCallbackQuery(`Grade ${grade} ✓`);
-          await renderGradeCommentPrompt(grade);
-        } else {
-          await upd.answerCallbackQuery().catch(() => {});
-        }
+        const changed = newGrade !== grade;
+        grade = newGrade;
+        commentMode = 'idle';
+        await upd.answerCallbackQuery(changed ? `Grade ${grade} ✓` : `Grade ${grade}`).catch(() => {});
+        await renderGradeCommentPrompt(grade, commentMode);
         continue;
       }
       await upd.answerCallbackQuery().catch(() => {});
