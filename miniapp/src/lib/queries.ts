@@ -677,6 +677,66 @@ export async function insertVisitPhoto(
   return !error;
 }
 
+export interface StatsActivity {
+  visits: { date: string; store_id: string; store_name: string }[];
+  trainings: { date: string; store_id: string; store_name: string; staff_count: number }[];
+}
+
+export async function getStatsActivityForCM(
+  telegramId: number,
+  fromDate?: string,
+  toDate?: string,
+): Promise<StatsActivity> {
+  let q = supabase
+    .from("visits")
+    .select("id, visit_date, store_id, stores(name), visit_cms!inner(cm_telegram_id)")
+    .eq("visit_cms.cm_telegram_id", telegramId)
+    .eq("is_locked", true);
+  if (fromDate) q = q.gte("visit_date", fromDate);
+  if (toDate) q = q.lte("visit_date", toDate);
+
+  const { data: visitRows } = await q
+    .order("visit_date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (visitRows ?? []) as any[];
+  if (rows.length === 0) return { visits: [], trainings: [] };
+
+  const visitsList = rows.map((r) => ({
+    id: r.id as string,
+    date: r.visit_date as string,
+    store_id: r.store_id as string,
+    store_name: (r.stores?.name as string | null) ?? "",
+  }));
+
+  const visitIds = visitsList.map((v) => v.id);
+  const { data: trainedRows } = await supabase
+    .from("visit_staff")
+    .select("visit_id")
+    .eq("was_trained", true)
+    .in("visit_id", visitIds);
+
+  const trainedCountByVisit = new Map<string, number>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const r of (trainedRows ?? []) as any[]) {
+    const vid = r.visit_id as string;
+    trainedCountByVisit.set(vid, (trainedCountByVisit.get(vid) ?? 0) + 1);
+  }
+
+  const visits = visitsList.map(({ id: _id, ...v }) => v); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const trainings = visitsList
+    .filter((v) => trainedCountByVisit.has(v.id))
+    .map((v) => ({
+      date: v.date,
+      store_id: v.store_id,
+      store_name: v.store_name,
+      staff_count: trainedCountByVisit.get(v.id) ?? 0,
+    }));
+
+  return { visits, trainings };
+}
+
 export interface TrainingStats {
   staff_trained_count: number;
   visits_with_training: number;
