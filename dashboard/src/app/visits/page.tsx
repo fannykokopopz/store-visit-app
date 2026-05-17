@@ -90,10 +90,10 @@ export default function VisitsPage() {
   const [filterCM,   setFilterCM]   = useState("");
   const [weekOffset, setWeekOffset] = useState(0);
   const [lightbox,   setLightbox]   = useState<string | null>(null);
-  const [sectionFilters, setSectionFilters] = useState<SectionKey[]>([]);
+  const [focusSection, setFocusSection] = useState<SectionKey | null>(null);
 
-  function toggleSection(key: SectionKey) {
-    setSectionFilters(curr => curr.includes(key) ? curr.filter(s => s !== key) : [...curr, key]);
+  function toggleFocus(key: SectionKey) {
+    setFocusSection(curr => curr === key ? null : key);
   }
 
   const thisMonday    = getMonday(new Date());
@@ -169,17 +169,28 @@ export default function VisitsPage() {
           )}
         </div>
 
-        {/* Section "has" filter chips */}
+        {/* Section focus chips — pick one to filter & narrow view to that section */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 20, alignItems: "center" }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-ink-300)", textTransform: "uppercase", letterSpacing: "0.6px", marginRight: 4 }}>
-            Has
+            Show
           </span>
+          <button
+            onClick={() => setFocusSection(null)}
+            className="mchip"
+            style={{
+              background: focusSection === null ? "var(--color-tc-50)" : undefined,
+              color: focusSection === null ? "var(--color-tc-600)" : undefined,
+              borderColor: focusSection === null ? "var(--color-tc-100)" : undefined,
+            }}
+          >
+            All
+          </button>
           {SECTIONS.map(s => {
-            const active = sectionFilters.includes(s.key);
+            const active = focusSection === s.key;
             return (
               <button
                 key={s.key}
-                onClick={() => toggleSection(s.key)}
+                onClick={() => toggleFocus(s.key)}
                 className="mchip"
                 style={{
                   background: active ? "var(--color-tc-50)" : undefined,
@@ -191,14 +202,6 @@ export default function VisitsPage() {
               </button>
             );
           })}
-          {sectionFilters.length > 0 && (
-            <button
-              onClick={() => setSectionFilters([])}
-              style={{ fontSize: 11, fontWeight: 600, color: "var(--color-ink-300)", background: "none", border: "none", cursor: "pointer", marginLeft: 4 }}
-            >
-              Clear
-            </button>
-          )}
         </div>
 
         {/* Feed */}
@@ -207,27 +210,30 @@ export default function VisitsPage() {
             <p style={{ color: "var(--color-ink-300)", fontSize: 13 }}>Loading…</p>
           </div>
         ) : (() => {
-          const filtered = sectionFilters.length === 0
+          const filtered = focusSection === null
             ? visits
-            : visits.filter(v => sectionFilters.every(k => v[k]));
+            : visits.filter(v => v[focusSection]);
           if (filtered.length === 0) {
+            const focusLabel = focusSection ? SECTIONS.find(s => s.key === focusSection)?.label : null;
             return (
               <div className="empty-state">
                 <p className="empty-state-icon">📋</p>
                 <p>
                   {visits.length === 0
                     ? <>No visits logged for this week{market !== "ALL" ? ` in ${market}` : ""}.</>
-                    : <>No visits match the selected section filters.</>}
+                    : <>No visits with {focusLabel} for this week.</>}
                 </p>
               </div>
             );
           }
           return (
-          <div>
+          <div className="visit-card-grid">
             {filtered.map(v => {
               const tier = v.store_tier;
               const ts   = tier ? TIER_STYLE[tier] : null;
-              const filledSections = SECTIONS.filter(s => v[s.key]);
+              const visibleSections = focusSection === null
+                ? SECTIONS.filter(s => v[s.key])
+                : SECTIONS.filter(s => s.key === focusSection && v[s.key]);
 
               return (
                 <div key={v.id} className="visit-card">
@@ -280,13 +286,13 @@ export default function VisitsPage() {
                     )}
 
                     {/* Section cards */}
-                    {filledSections.length === 0 ? (
+                    {visibleSections.length === 0 ? (
                       <p style={{ fontSize: 13, color: "var(--color-ink-300)", paddingTop: v.photo_urls.length > 0 ? 8 : 14 }}>
                         No notes were added for this visit.
                       </p>
                     ) : (
                       <div className="visit-sections-grid" style={{ paddingTop: v.photo_urls.length > 0 ? 8 : 14 }}>
-                        {filledSections.map(s => (
+                        {visibleSections.map(s => (
                           <div
                             key={s.key}
                             className="visit-section-card"

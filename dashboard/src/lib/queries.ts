@@ -32,6 +32,11 @@ export interface StaffRow {
   store_name: string;
   store_chain: string;
   store_tier: "T1" | "T2" | "T3" | "T4" | null;
+  store_market?: "SG" | "MY" | "TH" | "HK";
+  tagged_visits?: number;
+  times_trained?: number;
+  last_trained_at?: string | null;
+  last_trained_products?: string | null;
 }
 
 export interface CMOption { telegram_id: number; name: string }
@@ -230,11 +235,11 @@ export async function getStoresList(): Promise<StoreOption[]> {
 export async function getAllStaff(): Promise<StaffRow[]> {
   const { data } = await supabase
     .from("staff")
-    .select("*, stores(name, chain, tier)")
+    .select("*, stores(name, chain, tier, market)")
     .order("store_id")
     .order("name");
 
-  return (data ?? []).map((s) => {
+  const staffRows: StaffRow[] = (data ?? []).map((s) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const row = s as any;
     return {
@@ -248,8 +253,61 @@ export async function getAllStaff(): Promise<StaffRow[]> {
       store_name: row.stores?.name ?? "Unknown",
       store_chain: row.stores?.chain ?? "",
       store_tier: row.stores?.tier ?? null,
+      store_market: row.stores?.market ?? "SG",
+      tagged_visits: 0,
+      times_trained: 0,
+      last_trained_at: null,
+      last_trained_products: null,
     };
   });
+
+  // Pull training data from visit_staff. Tolerate the migration not being applied yet.
+  if (staffRows.length > 0) {
+    const ids = staffRows.map((s) => s.id);
+    const { data: vsRaw, error: vsErr } = await supabase
+      .from("visit_staff")
+      .select("staff_id, was_trained, products_trained_on, visits(visit_date, is_locked)")
+      .in("staff_id", ids);
+    if (!vsErr && vsRaw) {
+      type Vs = {
+        staff_id: string;
+        was_trained?: boolean | null;
+        products_trained_on?: string | null;
+        visits?: { visit_date?: string; is_locked?: boolean } | null;
+      };
+      const byStaff = new Map<string, {
+        tagged: number;
+        trained: number;
+        last_trained_at: string | null;
+        last_trained_products: string | null;
+      }>();
+      for (const linkRaw of vsRaw) {
+        const link = linkRaw as unknown as Vs;
+        const v = link.visits;
+        if (v && v.is_locked === false) continue;
+        const acc = byStaff.get(link.staff_id) ?? { tagged: 0, trained: 0, last_trained_at: null, last_trained_products: null };
+        acc.tagged += 1;
+        if (link.was_trained) {
+          acc.trained += 1;
+          const vDate = v?.visit_date ?? null;
+          if (vDate && (acc.last_trained_at === null || vDate > acc.last_trained_at)) {
+            acc.last_trained_at = vDate;
+            acc.last_trained_products = link.products_trained_on ?? null;
+          }
+        }
+        byStaff.set(link.staff_id, acc);
+      }
+      for (const s of staffRows) {
+        const agg = byStaff.get(s.id);
+        s.tagged_visits = agg?.tagged ?? 0;
+        s.times_trained = agg?.trained ?? 0;
+        s.last_trained_at = agg?.last_trained_at ?? null;
+        s.last_trained_products = agg?.last_trained_products ?? null;
+      }
+    }
+  }
+
+  return staffRows;
 }
 
 export interface StoreInfo {
