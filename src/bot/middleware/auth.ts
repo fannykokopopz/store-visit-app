@@ -39,3 +39,17 @@ export function requireAdmin(ctx: BotContext): CM | null {
   }
   return user;
 }
+
+export function requireManager(ctx: BotContext): CM | null {
+  const user = requireAuth(ctx);
+  if (!user) return null;
+  if (user.role !== 'admin' && user.role !== 'am' && user.role !== 'cmic') {
+    ctx.reply('This command is for AM, CM IC, and admins only — ask your AM if you need access.');
+    return null;
+  }
+  return user;
+}
+
+export function isManager(user: CM | undefined): boolean {
+  return !!user && (user.role === 'admin' || user.role === 'am' || user.role === 'cmic');
+}

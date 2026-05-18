@@ -1,6 +1,8 @@
-import { BotContext } from '../middleware/auth.js';
+import { BotContext, requireManager } from '../middleware/auth.js';
 
 export async function handleDashboard(ctx: BotContext): Promise<void> {
+  if (!requireManager(ctx)) return;
+
   const url = process.env.DASHBOARD_URL;
   if (!url) {
     await ctx.reply('Dashboard URL not configured yet. Ask your admin to set it up.');
