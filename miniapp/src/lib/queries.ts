@@ -34,6 +34,9 @@ export interface VisitSummary {
 export interface AllMarketStore extends Store {
   last_visit_date: string | null;
   last_visit_cm: string | null;
+  is_assigned?: boolean;
+  last_visit_by_you?: string | null;
+  last_visit_by_team?: { date: string; cm_name: string } | null;
 }
 
 export interface SearchResult {
@@ -220,7 +223,10 @@ export async function getStoreTimelineForCM(
   return { store, visits };
 }
 
-export async function getAllStoresInMarket(market: string): Promise<AllMarketStore[]> {
+export async function getAllStoresInMarket(
+  market: string,
+  currentCmTelegramId?: number,
+): Promise<AllMarketStore[]> {
   const { data: storeRows } = await supabase
     .from("stores")
     .select("*")
@@ -230,32 +236,78 @@ export async function getAllStoresInMarket(market: string): Promise<AllMarketSto
 
   if (!storeRows || storeRows.length === 0) return [];
 
-  const storeIds = storeRows.map((s: any) => s.id); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const { data: visitRows } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const storeIds = storeRows.map((s: any) => s.id) as string[];
+
+  const visitsP = supabase
     .from("visits")
-    .select("store_id, visit_date, created_at, cms!cm_telegram_id(full_name, nickname)")
+    .select("id, store_id, visit_date, created_at, cm_telegram_id, cms!cm_telegram_id(full_name, nickname)")
     .in("store_id", storeIds)
     .eq("is_locked", true)
     .order("visit_date", { ascending: false })
     .order("created_at", { ascending: false });
 
-  const lastVisitByStore = new Map<string, { date: string; cm_name: string }>();
-  for (const v of visitRows ?? []) {
+  const myVisitsP = currentCmTelegramId !== undefined
+    ? supabase
+        .from("visits")
+        .select("id, store_id, visit_date, visit_cms!inner(cm_telegram_id)")
+        .eq("visit_cms.cm_telegram_id", currentCmTelegramId)
+        .in("store_id", storeIds)
+        .eq("is_locked", true)
+        .order("visit_date", { ascending: false })
+        .order("created_at", { ascending: false })
+    : Promise.resolve({ data: [] as unknown[] });
+
+  const assignmentsP = currentCmTelegramId !== undefined
+    ? supabase
+        .from("cm_store_assignments")
+        .select("store_id")
+        .eq("cm_telegram_id", currentCmTelegramId)
+        .eq("is_active", true)
+    : Promise.resolve({ data: [] as unknown[] });
+
+  const [visitsRes, myVisitsRes, assignRes] = await Promise.all([visitsP, myVisitsP, assignmentsP]);
+
+  // Visit IDs the current CM participated in (lead OR co-CM) — so we can
+  // exclude them from "last team visit" even when someone else was lead.
+  const myVisitIds = new Set<string>();
+  const myLastByStore = new Map<string, string>();
+  for (const v of myVisitsRes.data ?? []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const row = v as any;
+    if (row.id) myVisitIds.add(row.id as string);
+    if (!myLastByStore.has(row.store_id)) myLastByStore.set(row.store_id, row.visit_date);
+  }
+
+  // Overall last visit (any CM)
+  const lastVisitByStore = new Map<string, { date: string; cm_name: string }>();
+  // Last visit where I had no involvement at all (neither lead nor co-CM)
+  const lastTeamByStore = new Map<string, { date: string; cm_name: string }>();
+  for (const v of visitsRes.data ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = v as any;
+    const cmName = row.cms?.nickname ?? row.cms?.full_name ?? "Unknown";
     if (!lastVisitByStore.has(row.store_id)) {
-      lastVisitByStore.set(row.store_id, {
-        date: row.visit_date,
-        cm_name: row.cms?.nickname ?? row.cms?.full_name ?? "Unknown",
-      });
+      lastVisitByStore.set(row.store_id, { date: row.visit_date, cm_name: cmName });
+    }
+    if (currentCmTelegramId !== undefined && !myVisitIds.has(row.id) && !lastTeamByStore.has(row.store_id)) {
+      lastTeamByStore.set(row.store_id, { date: row.visit_date, cm_name: cmName });
     }
   }
+
+  const assignedSet = new Set(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((assignRes.data ?? []) as any[]).map((a) => a.store_id as string),
+  );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return storeRows.map((s: any) => ({
     ...(s as Store),
     last_visit_date: lastVisitByStore.get(s.id)?.date ?? null,
     last_visit_cm: lastVisitByStore.get(s.id)?.cm_name ?? null,
+    is_assigned: assignedSet.has(s.id),
+    last_visit_by_you: myLastByStore.get(s.id) ?? null,
+    last_visit_by_team: lastTeamByStore.get(s.id) ?? null,
   })).sort((a, b) => {
     if (a.last_visit_date && b.last_visit_date) return b.last_visit_date.localeCompare(a.last_visit_date);
     if (a.last_visit_date) return -1;
@@ -622,6 +674,66 @@ export async function insertVisitPhoto(
     ...(fileSize !== undefined && { file_size: fileSize }),
   });
   return !error;
+}
+
+export interface StatsActivity {
+  visits: { date: string; store_id: string; store_name: string }[];
+  trainings: { date: string; store_id: string; store_name: string; staff_count: number }[];
+}
+
+export async function getStatsActivityForCM(
+  telegramId: number,
+  fromDate?: string,
+  toDate?: string,
+): Promise<StatsActivity> {
+  let q = supabase
+    .from("visits")
+    .select("id, visit_date, store_id, stores(name), visit_cms!inner(cm_telegram_id)")
+    .eq("visit_cms.cm_telegram_id", telegramId)
+    .eq("is_locked", true);
+  if (fromDate) q = q.gte("visit_date", fromDate);
+  if (toDate) q = q.lte("visit_date", toDate);
+
+  const { data: visitRows } = await q
+    .order("visit_date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (visitRows ?? []) as any[];
+  if (rows.length === 0) return { visits: [], trainings: [] };
+
+  const visitsList = rows.map((r) => ({
+    id: r.id as string,
+    date: r.visit_date as string,
+    store_id: r.store_id as string,
+    store_name: (r.stores?.name as string | null) ?? "",
+  }));
+
+  const visitIds = visitsList.map((v) => v.id);
+  const { data: trainedRows } = await supabase
+    .from("visit_staff")
+    .select("visit_id")
+    .eq("was_trained", true)
+    .in("visit_id", visitIds);
+
+  const trainedCountByVisit = new Map<string, number>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const r of (trainedRows ?? []) as any[]) {
+    const vid = r.visit_id as string;
+    trainedCountByVisit.set(vid, (trainedCountByVisit.get(vid) ?? 0) + 1);
+  }
+
+  const visits = visitsList.map(({ id: _id, ...v }) => v); // eslint-disable-line @typescript-eslint/no-unused-vars
+  const trainings = visitsList
+    .filter((v) => trainedCountByVisit.has(v.id))
+    .map((v) => ({
+      date: v.date,
+      store_id: v.store_id,
+      store_name: v.store_name,
+      staff_count: trainedCountByVisit.get(v.id) ?? 0,
+    }));
+
+  return { visits, trainings };
 }
 
 export interface TrainingStats {
