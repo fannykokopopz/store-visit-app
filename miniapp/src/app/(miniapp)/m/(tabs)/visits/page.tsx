@@ -1,29 +1,30 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, useCallback, useRef, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { initTelegram, getStartParam } from "../../telegram-init";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface PortfolioStore {
-  id: string;
+interface Whoami {
   name: string;
-  chain: string;
-  tier: "T1" | "T2" | "T3" | "T4" | null;
-  last_visit_date: string | null;
-  last_visit_id: string | null;
-  visits_30d: number;
+  nickname: string | null;
+  role: "cm" | "cmic" | "am" | "admin";
+  market: string;
 }
 
-interface AllMarketStore {
+interface VisitRow {
   id: string;
-  name: string;
-  chain: string;
-  tier: "T1" | "T2" | "T3" | "T4" | null;
-  last_visit_date: string | null;
-  last_visit_cm: string | null;
+  date: string;
+  store_id: string;
+  store_name: string;
+  store_chain: string;
+}
+
+interface Activity {
+  visits: VisitRow[];
+  trainings: { date: string; store_id: string; store_name: string; staff_count: number }[];
 }
 
 interface SearchResult {
@@ -49,20 +50,7 @@ interface FilterOptions {
   canFilterCM: boolean;
 }
 
-interface TrainingStats {
-  staff_trained_count: number;
-  visits_with_training: number;
-  recent: { staff_name: string; products: string; visit_date: string; store_name: string }[];
-}
-
-interface Portfolio {
-  cm: { name: string; market: string; nickname: string | null };
-  stores: PortfolioStore[];
-}
-
 // ── Constants ─────────────────────────────────────────────────────────────────
-
-const OVERDUE_DAYS: Record<string, number> = { T1: 7, T2: 14, T3: 30, T4: 90 };
 
 const TIER_STYLE: Record<string, string> = {
   T1: "bg-[var(--color-tier-t1-bg)] text-[var(--color-tier-t1-fg)]",
@@ -79,37 +67,41 @@ const SECTION_LABELS: Record<string, string> = {
   buzz_plan: "Buzz Plan",
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Date helpers ──────────────────────────────────────────────────────────────
 
-function daysSince(dateStr: string | null): number | null {
-  if (!dateStr) return null;
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const then = new Date(dateStr); then.setHours(0, 0, 0, 0);
-  return Math.round((today.getTime() - then.getTime()) / 86400000);
+function parseISO(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
 }
-
-function lastVisitLabel(dateStr: string | null): string {
-  const d = daysSince(dateStr);
-  if (d === null) return "Never visited";
-  if (d <= 0) return "Visited today";
-  if (d === 1) return "Yesterday";
-  if (d < 7) return `${d} days ago`;
-  if (d < 14) return "Over a week ago";
-  if (d < 30) return "Over 2 weeks ago";
-  if (d < 60) return "Over a month ago";
-  return "Over 2 months ago";
+function toISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-
-function visitAgoClass(dateStr: string | null, tier: string | null): string {
-  const d = daysSince(dateStr);
-  if (d === null) return "text-ink-300";
-  if (d <= 1) return "text-[var(--color-tier-t2-fg)] font-semibold";
-  const threshold = tier ? (OVERDUE_DAYS[tier] ?? 14) : 14;
-  if (d > threshold) return "text-[var(--color-status-bad-fg)] font-semibold";
-  if (d > threshold * 0.7) return "text-[var(--color-status-warn-fg)] font-semibold";
-  return "text-ink-400 font-medium";
+function weekStart(iso: string): string {
+  const d = parseISO(iso);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day; // Monday
+  d.setDate(d.getDate() + diff);
+  return toISO(d);
 }
-
+function isoWeek(iso: string): number {
+  const d = parseISO(iso);
+  const target = new Date(d);
+  const dayNr = (d.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = new Date(target.getFullYear(), 0, 4);
+  const firstThursdayDayNr = (firstThursday.getDay() + 6) % 7;
+  firstThursday.setDate(firstThursday.getDate() - firstThursdayDayNr + 3);
+  const diff = (target.getTime() - firstThursday.getTime()) / 86400000;
+  return 1 + Math.round(diff / 7);
+}
+function weekRangeLabel(weekStartIso: string): string {
+  const start = parseISO(weekStartIso);
+  const end = new Date(start); end.setDate(end.getDate() + 6);
+  const sameMonth = start.getMonth() === end.getMonth();
+  const fmtMonth = (d: Date) => d.toLocaleDateString("en-GB", { month: "short" });
+  if (sameMonth) return `${start.getDate()}–${end.getDate()} ${fmtMonth(end)}`;
+  return `${start.getDate()} ${fmtMonth(start)} – ${end.getDate()} ${fmtMonth(end)}`;
+}
 function fmtDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
@@ -125,30 +117,27 @@ function highlight(text: string | null, query: string): string {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function PortfolioPage() {
+export default function VisitsPage() {
   return (
     <Suspense fallback={
       <main className="flex min-h-screen items-center justify-center p-6">
         <p className="text-center text-sm text-ink-300">Loading…</p>
       </main>
     }>
-      <PortfolioContent />
+      <VisitsContent />
     </Suspense>
   );
 }
 
-function PortfolioContent() {
-  const urlParams = useSearchParams();
-  const initialTab = urlParams.get("tab") === "all" ? "all" : "my";
+function VisitsContent() {
+  const router = useRouter();
 
-  const [tab, setTab] = useState<"my" | "all">(initialTab as "my" | "all");
-  const [data, setData] = useState<Portfolio | null>(null);
-  const [allStores, setAllStores] = useState<AllMarketStore[] | null>(null);
+  const [whoami, setWhoami] = useState<Whoami | null>(null);
+  const [activity, setActivity] = useState<Activity | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [dismissed, setDismissed] = useState(false);
   const [initData, setInitData] = useState<string | null>(null);
 
-  // Search state
+  // Search overlay state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sectionFilters, setSectionFilters] = useState<SectionKey[]>([]);
@@ -162,32 +151,19 @@ function PortfolioContent() {
   const [searching, setSearching] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Settings state
+  // Settings sheet state
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [nickInput, setNickInput] = useState("");
   const [nickSaving, setNickSaving] = useState(false);
   const [nickSaved, setNickSaved] = useState(false);
 
-  // Training stats (this calendar month)
-  const [training, setTraining] = useState<TrainingStats | null>(null);
-  const [trainingOpen, setTrainingOpen] = useState(false);
-
-  const router = useRouter();
-
-  // Bootstrap
+  // Bootstrap: handle deep link, load whoami + activity
   useEffect(() => {
-    setDismissed(!!localStorage.getItem("sva-onboard-dismissed"));
     (async () => {
       const id = await initTelegram();
       if (!id) { setError("Open this from inside Telegram."); return; }
 
-      // Deep link from broadcast / Done message:
-      //   visit_<uuid>           → visit detail
-      //   visit_<uuid>_training  → visit detail + auto-open training editor
-      // Telegram keeps start_param around for the whole Mini App session, so if
-      // the user navigates back to /m they'd get re-redirected forever. Track
-      // which value we've already handled in sessionStorage so each unique
-      // deep link fires once.
+      // Deep link from broadcast / Done message — fires once per unique start_param
       const startParam = getStartParam();
       const lastHandled = sessionStorage.getItem("sva-deeplink-handled");
       const visitMatch = startParam && startParam !== lastHandled
@@ -201,48 +177,23 @@ function PortfolioContent() {
       }
 
       setInitData(id);
-      const res = await fetch("/api/m/portfolio", { headers: { Authorization: `tma ${id}` } });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(body.error ?? `Failed (${res.status})`);
-        return;
-      }
-      const payload = await res.json();
-      setData(payload);
-      setNickInput(payload.cm.nickname ?? payload.cm.name.split(" ")[0]);
+      const headers = { Authorization: `tma ${id}` };
+      const [wRes, aRes] = await Promise.all([
+        fetch("/api/m/whoami", { headers }),
+        fetch("/api/m/stats/activity", { headers }),
+      ]);
+      if (!wRes.ok) { setError(`Failed (${wRes.status})`); return; }
+      if (!aRes.ok) { setError(`Failed (${aRes.status})`); return; }
+      const wJson: Whoami = await wRes.json();
+      const aJson: Activity = await aRes.json();
+      setWhoami(wJson);
+      setActivity(aJson);
+      setNickInput(wJson.nickname ?? wJson.name.split(" ")[0]);
     })().catch((e) => setError(String(e)));
   }, [router]);
 
-  // Lazy-load All Stores tab
-  useEffect(() => {
-    if (tab !== "all" || allStores !== null || !initData) return;
-    fetch("/api/m/stores", { headers: { Authorization: `tma ${initData}` } })
-      .then((r) => r.json())
-      .then((j) => setAllStores(j.stores ?? []))
-      .catch(() => setAllStores([]));
-  }, [tab, allStores, initData]);
+  // ── Search effects ──────────────────────────────────────────────────────────
 
-  // Training stats for the current calendar month
-  useEffect(() => {
-    if (!initData || training !== null) return;
-    const now = new Date();
-    const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    fetch(`/api/m/stats/training?from=${from}`, { headers: { Authorization: `tma ${initData}` } })
-      .then((r) => r.json())
-      .then((j) => setTraining({
-        staff_trained_count: j.staff_trained_count ?? 0,
-        visits_with_training: j.visits_with_training ?? 0,
-        recent: j.recent ?? [],
-      }))
-      .catch(() => setTraining({ staff_trained_count: 0, visits_with_training: 0, recent: [] }));
-  }, [initData, training]);
-
-  const hasAnyFilter =
-    sectionFilters.length > 0 || !!fromDate || !!toDate || !!storeFilter || !!cmFilter;
-  const filterCount =
-    sectionFilters.length + (fromDate ? 1 : 0) + (toDate ? 1 : 0) + (storeFilter ? 1 : 0) + (cmFilter ? 1 : 0);
-
-  // Debounced search
   const doSearch = useCallback(
     async (q: string, sections: SectionKey[], from: string, to: string, store: string, cm: string) => {
       if (!initData) { setSearchResults(null); return; }
@@ -278,7 +229,6 @@ function PortfolioContent() {
     return () => clearTimeout(t);
   }, [searchQuery, sectionFilters, fromDate, toDate, storeFilter, cmFilter, searchOpen, doSearch]);
 
-  // Fetch filter options once when search opens
   useEffect(() => {
     if (!searchOpen || !initData || filterOptions !== null) return;
     fetch("/api/m/filter-options", { headers: { Authorization: `tma ${initData}` } })
@@ -287,10 +237,14 @@ function PortfolioContent() {
       .catch(() => setFilterOptions({ stores: [], cms: [], canFilterCM: false }));
   }, [searchOpen, initData, filterOptions]);
 
-  // Focus search input when opened
   useEffect(() => {
     if (searchOpen) setTimeout(() => searchRef.current?.focus(), 50);
   }, [searchOpen]);
+
+  const hasAnyFilter =
+    sectionFilters.length > 0 || !!fromDate || !!toDate || !!storeFilter || !!cmFilter;
+  const filterCount =
+    sectionFilters.length + (fromDate ? 1 : 0) + (toDate ? 1 : 0) + (storeFilter ? 1 : 0) + (cmFilter ? 1 : 0);
 
   function openSearch() {
     setSearchOpen(true);
@@ -325,10 +279,40 @@ function PortfolioContent() {
     setNickSaving(false);
     if (res.ok) {
       setNickSaved(true);
-      if (data) setData({ ...data, cm: { ...data.cm, nickname: nickInput.trim() } });
+      if (whoami) setWhoami({ ...whoami, nickname: nickInput.trim() });
       setTimeout(() => { setNickSaved(false); setSettingsOpen(false); }, 800);
     }
   }
+
+  // ── Group visits: week → chain ──────────────────────────────────────────────
+
+  const grouped = useMemo(() => {
+    if (!activity) return null;
+    const byWeek = new Map<string, VisitRow[]>();
+    for (const v of activity.visits) {
+      const wk = weekStart(v.date);
+      const arr = byWeek.get(wk) ?? [];
+      arr.push(v);
+      byWeek.set(wk, arr);
+    }
+    const weeks = Array.from(byWeek.keys()).sort().reverse();
+    return weeks.map((wk) => {
+      const visits = (byWeek.get(wk) ?? []).slice().sort((a, b) => b.date.localeCompare(a.date));
+      const byChain = new Map<string, VisitRow[]>();
+      for (const v of visits) {
+        const c = v.store_chain || "—";
+        const arr = byChain.get(c) ?? [];
+        arr.push(v);
+        byChain.set(c, arr);
+      }
+      const chains = Array.from(byChain.entries())
+        .map(([chain, items]) => ({ chain, items }))
+        .sort((a, b) => a.chain.localeCompare(b.chain));
+      return { weekStart: wk, total: visits.length, chains };
+    });
+  }, [activity]);
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   if (error) {
     return (
@@ -337,7 +321,7 @@ function PortfolioContent() {
       </main>
     );
   }
-  if (!data) {
+  if (!whoami || !activity || !grouped) {
     return (
       <main className="flex min-h-screen items-center justify-center p-6">
         <p className="text-center text-sm text-ink-300">Loading…</p>
@@ -345,11 +329,11 @@ function PortfolioContent() {
     );
   }
 
-  const displayName = data.cm.nickname ?? data.cm.name.split(" ")[0];
+  const displayName = whoami.nickname ?? whoami.name.split(" ")[0];
 
   return (
     <>
-      <main className="min-h-screen pb-12">
+      <main className="min-h-screen pb-4">
         {/* Header */}
         <header className="bg-white border-b border-ink-100 px-4 pt-5 pb-4">
           <div className="flex items-start justify-between">
@@ -358,9 +342,7 @@ function PortfolioContent() {
                 Good day
               </p>
               <h1 className="text-[28px] font-extrabold leading-tight text-ink-700">{displayName}</h1>
-              <p className="text-xs text-ink-300 mt-0.5">
-                {data.stores.length} stores · {data.cm.market}
-              </p>
+              <p className="text-xs text-ink-300 mt-0.5">{whoami.market}</p>
             </div>
             <div className="flex items-center gap-2 mt-1">
               <button
@@ -381,132 +363,48 @@ function PortfolioContent() {
           </div>
         </header>
 
-        {/* Tab bar */}
-        <div className="bg-white border-b border-ink-100 flex">
-          {(["my", "all"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 py-3 text-[13px] font-semibold transition-colors ${
-                tab === t
-                  ? "text-[var(--color-tc-600)] border-b-2 border-[var(--color-tc-600)]"
-                  : "text-ink-300"
-              }`}
-            >
-              {t === "my" ? "My Stores" : "All Stores"}
-            </button>
-          ))}
-        </div>
-
-        {/* My Stores tab */}
-        {tab === "my" && (
-          <>
-            {training && (training.staff_trained_count > 0 || training.visits_with_training > 0) && (
-              <div className="mx-3.5 mt-3 rounded-2xl border border-[var(--color-section-teal-border)] bg-[var(--color-section-teal-bg)] p-3.5">
-                <button
-                  onClick={() => setTrainingOpen((v) => !v)}
-                  className="w-full text-left flex items-center justify-between"
-                >
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--color-section-teal-fg)] mb-0.5">
-                      🎓 Training this month
-                    </p>
-                    <p className="text-sm font-bold text-ink-700">
-                      {training.staff_trained_count} staff · {training.visits_with_training} visits
-                    </p>
-                  </div>
-                  <span className="text-ink-300 text-lg">{trainingOpen ? "▴" : "▾"}</span>
-                </button>
-                {trainingOpen && training.recent.length > 0 && (
-                  <ul className="mt-3 space-y-1.5 max-h-64 overflow-y-auto">
-                    {training.recent.map((r, i) => (
-                      <li key={i} className="rounded-lg bg-white/60 px-2.5 py-2">
-                        <p className="text-[12px] font-bold text-ink-700">{r.staff_name}</p>
-                        <p className="text-[11px] text-ink-400 truncate">{r.products}</p>
-                        <p className="text-[10px] text-ink-300 mt-0.5">{r.store_name}{r.visit_date ? ` · ${r.visit_date}` : ""}</p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-
-            {!dismissed && (
-              <div className="mx-3.5 mt-3 rounded-2xl border border-[var(--color-tc-100)] bg-[var(--color-tc-50)] p-3.5">
-                <div className="flex gap-3 items-start">
-                  <span className="text-lg mt-0.5">👋</span>
-                  <div className="flex-1">
-                    <p className="text-xs font-bold text-ink-700 mb-0.5">Getting started</p>
-                    <p className="text-xs text-[var(--color-tc-600)] leading-relaxed">
-                      Tap any store to see its visit history. Use <strong>/visit</strong> in the bot to log a new visit.
-                    </p>
-                    <button
-                      onClick={() => { localStorage.setItem("sva-onboard-dismissed", "1"); setDismissed(true); }}
-                      className="mt-2 text-[11px] font-semibold text-[var(--color-tc-600)] bg-[var(--color-tc-100)] rounded-md px-2.5 py-1 cursor-pointer"
-                    >
-                      Got it
-                    </button>
-                  </div>
+        {/* Timeline */}
+        {grouped.length === 0 ? (
+          <div className="px-6 py-16 text-center">
+            <p className="text-sm text-ink-400 font-semibold">No visits yet</p>
+            <p className="text-xs text-ink-300 mt-1">Use <strong>/visit</strong> in the bot to log your first one.</p>
+          </div>
+        ) : (
+          grouped.map(({ weekStart: wk, total, chains }) => (
+            <section key={wk} className="mt-4">
+              <div className="px-4 pb-2 flex items-baseline justify-between">
+                <div>
+                  <span className="text-[11px] font-extrabold text-ink-700">Week {isoWeek(wk)}</span>
+                  <span className="text-[10px] font-semibold text-[var(--color-ink-500)] ml-1.5">· {weekRangeLabel(wk)}</span>
                 </div>
+                <span className="text-[10px] font-bold text-[var(--color-ink-500)] bg-white border border-[var(--color-ink-100)] px-2 py-px rounded-full">
+                  {total} {total === 1 ? "visit" : "visits"}
+                </span>
               </div>
-            )}
 
-            {(() => {
-              const visited = data.stores.filter((s) => s.last_visit_date);
-              const unvisited = data.stores.filter((s) => !s.last_visit_date);
-              return (
-                <>
-                  {visited.length > 0 && (
-                    <section className="mt-4">
-                      <h2 className="px-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-ink-300">
-                        Recently visited
-                      </h2>
-                      <ul className="space-y-2 px-3.5">
-                        {visited.map((s) => <MyStoreCard key={s.id} store={s} />)}
-                      </ul>
-                    </section>
-                  )}
-                  {unvisited.length > 0 && (
-                    <section className="mt-4">
-                      <h2 className="px-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-ink-300">
-                        Never visited
-                      </h2>
-                      <ul className="space-y-2 px-3.5">
-                        {unvisited.map((s) => <MyStoreCard key={s.id} store={s} />)}
-                      </ul>
-                    </section>
-                  )}
-                </>
-              );
-            })()}
-          </>
-        )}
-
-        {/* All Stores tab */}
-        {tab === "all" && (
-          <section className="mt-4">
-            {allStores === null ? (
-              <p className="text-center text-sm text-ink-300 py-8">Loading…</p>
-            ) : allStores.length === 0 ? (
-              <p className="text-center text-sm text-ink-300 py-8">No stores in {data.cm.market}</p>
-            ) : (
-              <>
-                <h2 className="px-4 pb-2 text-[10px] font-bold uppercase tracking-widest text-ink-300">
-                  {allStores.length} stores · {data.cm.market}
-                </h2>
-                <ul className="space-y-2 px-3.5">
-                  {allStores.map((s) => <AllStoreCard key={s.id} store={s} />)}
-                </ul>
-              </>
-            )}
-          </section>
+              {chains.map(({ chain, items }) => (
+                <div key={chain} className="mt-2">
+                  <div className="flex items-baseline justify-between px-[18px] pb-1.5">
+                    <span className="text-[10px] font-extrabold uppercase tracking-[0.07em] text-[var(--color-ink-500)]">
+                      {chain}
+                    </span>
+                    <span className="text-[10px] font-semibold text-ink-300">
+                      {items.length} {items.length === 1 ? "visit" : "visits"}
+                    </span>
+                  </div>
+                  <ul className="space-y-1.5 px-3.5">
+                    {items.map((v) => <VisitCard key={v.id} visit={v} />)}
+                  </ul>
+                </div>
+              ))}
+            </section>
+          ))
         )}
       </main>
 
       {/* Search overlay */}
       {searchOpen && (
         <div className="fixed inset-0 z-[60] bg-[var(--color-ink-50)] flex flex-col">
-          {/* Search header */}
           <div className="bg-white border-b border-ink-100 px-4 pt-5 pb-3">
             <div className="flex items-center gap-3">
               <div className="flex-1 flex items-center gap-2 bg-ink-100 rounded-xl px-3 h-10">
@@ -517,7 +415,7 @@ function PortfolioContent() {
                   placeholder="Search visit notes…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="flex-1 bg-transparent text-sm text-ink-700 placeholder:text-ink-300 outline-none"
+                  className="flex-1 bg-transparent text-[16px] text-ink-700 placeholder:text-ink-300 outline-none"
                 />
                 {searchQuery && (
                   <button onClick={() => setSearchQuery("")} className="text-ink-300 text-lg leading-none">×</button>
@@ -528,7 +426,6 @@ function PortfolioContent() {
               </button>
             </div>
 
-            {/* Has-section filter chips (multi-select) */}
             <div className="flex gap-1.5 mt-2.5 overflow-x-auto pb-0.5 no-scrollbar">
               {(Object.entries(SECTION_LABELS) as [SectionKey, string][]).map(([v, l]) => {
                 const active = sectionFilters.includes(v);
@@ -546,7 +443,6 @@ function PortfolioContent() {
               })}
             </div>
 
-            {/* More filters toggle + clear */}
             <div className="flex items-center justify-between mt-2">
               <button
                 onClick={() => setFiltersOpen((v) => !v)}
@@ -566,13 +462,12 @@ function PortfolioContent() {
 
             {filtersOpen && (
               <div className="mt-2 space-y-2">
-                {/* Date range */}
                 <div className="flex items-center gap-2">
                   <input
                     type="date"
                     value={fromDate}
                     onChange={(e) => setFromDate(e.target.value)}
-                    className="flex-1 text-[12px] bg-ink-100 rounded-lg px-2.5 py-1.5 outline-none text-ink-700"
+                    className="flex-1 text-[16px] bg-ink-100 rounded-lg px-2.5 py-1.5 outline-none text-ink-700"
                     placeholder="From"
                   />
                   <span className="text-ink-300 text-[11px]">to</span>
@@ -580,16 +475,15 @@ function PortfolioContent() {
                     type="date"
                     value={toDate}
                     onChange={(e) => setToDate(e.target.value)}
-                    className="flex-1 text-[12px] bg-ink-100 rounded-lg px-2.5 py-1.5 outline-none text-ink-700"
+                    className="flex-1 text-[16px] bg-ink-100 rounded-lg px-2.5 py-1.5 outline-none text-ink-700"
                     placeholder="To"
                   />
                 </div>
 
-                {/* Store */}
                 <select
                   value={storeFilter}
                   onChange={(e) => setStoreFilter(e.target.value)}
-                  className="w-full text-[12px] bg-ink-100 rounded-lg px-2.5 py-1.5 outline-none text-ink-700"
+                  className="w-full text-[16px] bg-ink-100 rounded-lg px-2.5 py-1.5 outline-none text-ink-700"
                 >
                   <option value="">All stores</option>
                   {(filterOptions?.stores ?? []).map((s) => (
@@ -597,12 +491,11 @@ function PortfolioContent() {
                   ))}
                 </select>
 
-                {/* CM (only if viewer is admin/am/cmic) */}
                 {filterOptions?.canFilterCM && (
                   <select
                     value={cmFilter}
                     onChange={(e) => setCmFilter(e.target.value)}
-                    className="w-full text-[12px] bg-ink-100 rounded-lg px-2.5 py-1.5 outline-none text-ink-700"
+                    className="w-full text-[16px] bg-ink-100 rounded-lg px-2.5 py-1.5 outline-none text-ink-700"
                   >
                     <option value="">All CMs</option>
                     {filterOptions.cms.map((c) => (
@@ -614,7 +507,6 @@ function PortfolioContent() {
             )}
           </div>
 
-          {/* Results */}
           <div className="flex-1 overflow-y-auto">
             {searching && (
               <p className="text-center text-sm text-ink-300 py-8">Searching…</p>
@@ -657,7 +549,7 @@ function PortfolioContent() {
               onChange={(e) => setNickInput(e.target.value)}
               maxLength={30}
               placeholder="Your name"
-              className="w-full rounded-xl border border-ink-200 bg-ink-50 px-4 py-3 text-sm text-ink-700 outline-none focus:border-[var(--color-tc-500)]"
+              className="w-full rounded-xl border border-ink-200 bg-ink-50 px-4 py-3 text-[16px] text-ink-700 outline-none focus:border-[var(--color-tc-500)]"
             />
             <p className="text-[11px] text-ink-300 mt-1">This is how the bot and mini app will greet you.</p>
 
@@ -676,61 +568,25 @@ function PortfolioContent() {
   );
 }
 
-// ── Store cards ───────────────────────────────────────────────────────────────
+// ── Cards ─────────────────────────────────────────────────────────────────────
 
-function MyStoreCard({ store }: { store: PortfolioStore }) {
-  const tierStyle = store.tier ? TIER_STYLE[store.tier] : TIER_STYLE.T4;
-  const agoClass = visitAgoClass(store.last_visit_date, store.tier);
+function VisitCard({ visit }: { visit: VisitRow }) {
+  const d = parseISO(visit.date);
+  const dow = d.toLocaleDateString("en-GB", { weekday: "short" });
+  const dayLabel = d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
   return (
     <li>
       <Link
-        href={`/m/store/${store.id}`}
-        className="flex items-center gap-3 rounded-[18px] border border-ink-100 bg-white p-3.5 shadow-sm active:scale-[0.98] transition-transform"
+        href={`/m/visit/${visit.id}`}
+        className="flex items-center gap-3 rounded-[16px] border border-ink-100 bg-white px-3.5 py-3 shadow-sm active:scale-[0.98] transition-transform"
       >
-        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[11px] font-extrabold ${tierStyle}`}>
-          {store.tier ?? "—"}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold text-ink-700">{store.name}</p>
-          <p className="text-[11px] text-ink-300 mt-0.5">{store.chain}</p>
-          <div className="flex items-center justify-between mt-1.5">
-            <span className={`text-[11px] ${agoClass}`}>{lastVisitLabel(store.last_visit_date)}</span>
-            {store.visits_30d > 0 && (
-              <span className="text-[9px] font-bold bg-[var(--color-tc-50)] text-[var(--color-tc-600)] rounded-full px-2 py-0.5">
-                {store.visits_30d} in 30d
-              </span>
-            )}
-          </div>
+        <div className="w-12 shrink-0">
+          <div className="text-[9px] font-bold text-ink-300 uppercase tracking-wider">{dow}</div>
+          <div className="text-[11px] font-bold text-[var(--color-ink-500)]">{dayLabel}</div>
         </div>
-        <span className="text-ink-200 text-lg">›</span>
-      </Link>
-    </li>
-  );
-}
-
-function AllStoreCard({ store }: { store: AllMarketStore }) {
-  const tierStyle = store.tier ? TIER_STYLE[store.tier] : TIER_STYLE.T4;
-  const agoClass = visitAgoClass(store.last_visit_date, store.tier);
-
-  return (
-    <li>
-      <Link
-        href={`/m/store/${store.id}?all=true`}
-        className="flex items-center gap-3 rounded-[18px] border border-ink-100 bg-white p-3.5 shadow-sm active:scale-[0.98] transition-transform"
-      >
-        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[11px] font-extrabold ${tierStyle}`}>
-          {store.tier ?? "—"}
-        </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold text-ink-700">{store.name}</p>
-          <p className="text-[11px] text-ink-300 mt-0.5">{store.chain}</p>
-          <div className="mt-1.5">
-            <span className={`text-[11px] ${agoClass}`}>{lastVisitLabel(store.last_visit_date)}</span>
-            {store.last_visit_cm && store.last_visit_date && (
-              <span className="text-[11px] text-ink-300"> · {store.last_visit_cm}</span>
-            )}
-          </div>
+          <p className="truncate text-[13px] font-bold text-ink-700">{visit.store_name || "—"}</p>
         </div>
         <span className="text-ink-200 text-lg">›</span>
       </Link>

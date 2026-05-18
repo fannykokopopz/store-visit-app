@@ -677,7 +677,7 @@ export async function insertVisitPhoto(
 }
 
 export interface StatsActivity {
-  visits: { date: string; store_id: string; store_name: string }[];
+  visits: { id: string; date: string; store_id: string; store_name: string; store_chain: string }[];
   trainings: { date: string; store_id: string; store_name: string; staff_count: number }[];
 }
 
@@ -688,7 +688,7 @@ export async function getStatsActivityForCM(
 ): Promise<StatsActivity> {
   let q = supabase
     .from("visits")
-    .select("id, visit_date, store_id, stores(name), visit_cms!inner(cm_telegram_id)")
+    .select("id, visit_date, store_id, stores(name, chain), visit_cms!inner(cm_telegram_id)")
     .eq("visit_cms.cm_telegram_id", telegramId)
     .eq("is_locked", true);
   if (fromDate) q = q.gte("visit_date", fromDate);
@@ -702,14 +702,15 @@ export async function getStatsActivityForCM(
   const rows = (visitRows ?? []) as any[];
   if (rows.length === 0) return { visits: [], trainings: [] };
 
-  const visitsList = rows.map((r) => ({
+  const visits = rows.map((r) => ({
     id: r.id as string,
     date: r.visit_date as string,
     store_id: r.store_id as string,
     store_name: (r.stores?.name as string | null) ?? "",
+    store_chain: (r.stores?.chain as string | null) ?? "",
   }));
 
-  const visitIds = visitsList.map((v) => v.id);
+  const visitIds = visits.map((v) => v.id);
   const { data: trainedRows } = await supabase
     .from("visit_staff")
     .select("visit_id")
@@ -723,8 +724,7 @@ export async function getStatsActivityForCM(
     trainedCountByVisit.set(vid, (trainedCountByVisit.get(vid) ?? 0) + 1);
   }
 
-  const visits = visitsList.map(({ id: _id, ...v }) => v); // eslint-disable-line @typescript-eslint/no-unused-vars
-  const trainings = visitsList
+  const trainings = visits
     .filter((v) => trainedCountByVisit.has(v.id))
     .map((v) => ({
       date: v.date,

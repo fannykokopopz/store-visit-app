@@ -135,7 +135,7 @@ export default function StatsPage() {
       try {
         await initTelegram();
         const initData = window.Telegram?.WebApp?.initData ?? "";
-        const headers = { "x-tg-init-data": initData };
+        const headers = { Authorization: `tma ${initData}` };
         const [whoamiRes, activityRes] = await Promise.all([
           fetch("/api/m/whoami", { headers }),
           fetch("/api/m/stats/activity", { headers }),

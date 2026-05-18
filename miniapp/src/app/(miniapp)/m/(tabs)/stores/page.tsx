@@ -67,7 +67,7 @@ export default function StoresPage() {
       try {
         await initTelegram();
         const initData = window.Telegram?.WebApp?.initData ?? "";
-        const res = await fetch("/api/m/stores", { headers: { "x-tg-init-data": initData } });
+        const res = await fetch("/api/m/stores", { headers: { Authorization: `tma ${initData}` } });
         if (!res.ok) throw new Error(`stores: ${res.status}`);
         const json: StoresPayload = await res.json();
         if (!cancelled) setData(json);
@@ -121,7 +121,7 @@ export default function StoresPage() {
       </div>
 
       {/* Floating search above bottom nav */}
-      <div className="fixed left-[14px] right-[14px] bottom-[88px] bg-white border border-[var(--color-ink-100)] rounded-2xl px-4 py-[10px] flex items-center gap-[10px] shadow-[0_6px_16px_rgba(0,0,0,0.08)] z-40">
+      <div className="fixed left-[14px] right-[14px] bottom-[100px] bg-white border border-[var(--color-ink-100)] rounded-2xl px-4 py-[10px] flex items-center gap-[10px] shadow-[0_6px_16px_rgba(0,0,0,0.08)] z-40">
         <span className="text-[var(--color-ink-300)] text-[15px]" aria-hidden>🔍</span>
         <input
           type="text"
@@ -129,7 +129,7 @@ export default function StoresPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search any store…"
-          className="flex-1 bg-transparent outline-none border-none text-[13px] text-[var(--color-ink-700)] placeholder:text-[var(--color-ink-300)]"
+          className="flex-1 bg-transparent outline-none border-none text-[16px] text-[var(--color-ink-700)] placeholder:text-[var(--color-ink-300)]"
         />
         {query && (
           <button
