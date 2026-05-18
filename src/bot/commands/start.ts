@@ -3,8 +3,7 @@ import { BotContext } from '../middleware/auth.js';
 import { getCMRecord } from '../../db/queries/cms.js';
 
 export const QUICK_ACCESS_KEYBOARD = new Keyboard()
-  .text('🏪 Log Visit').text('🕒 Recent Visits').row()
-  .text('🔗 Links')
+  .text('🏪 Log Visit').text('🔗 Links')
   .resized()
   .persistent();
 

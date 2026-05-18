@@ -51,12 +51,12 @@ export function createBot(): Bot<BotContext> {
   });
 
   // Quick-access reply keyboard buttons (shown after /start)
+  // 🏪 = "after the store" (log visit) · 🔗 = "in store" (currently links, future checklists)
   bot.hears('🏪 Log Visit', async (ctx) => {
     const user = requireAuth(ctx);
     if (!user) return;
     await ctx.conversation.enter('visitFlow');
   });
-  bot.hears('🕒 Recent Visits', handleMyVisits);
   bot.hears('🔗 Links', handleLinks);
 
   // Photo debounce handler — runs after conversation exits, catches album photos
