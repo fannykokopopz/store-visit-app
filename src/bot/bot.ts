@@ -5,6 +5,7 @@ import { BotContext, authMiddleware, requireAuth } from './middleware/auth.js';
 import { handleStart } from './commands/start.js';
 import { handleHelp } from './commands/help.js';
 import { handleLinks } from './commands/links.js';
+import { handleMyVisits } from './commands/myvisits.js';
 import { handleNickname } from './commands/nickname.js';
 import { handleMyProfile, handleProfileStores, handleProfileVisits, handleProfileBack } from './commands/myprofile.js';
 import { handleCancel } from './commands/cancel.js';
@@ -36,6 +37,7 @@ export function createBot(): Bot<BotContext> {
   bot.command('start', handleStart);
   bot.command('help', handleHelp);
   bot.command('links', handleLinks);
+  bot.command('myvisits', handleMyVisits);
   bot.command('nickname', handleNickname);
   bot.command('myprofile', handleMyProfile);
   bot.command('cancel', handleCancel);
@@ -47,6 +49,15 @@ export function createBot(): Bot<BotContext> {
     if (!user) return;
     await ctx.conversation.enter('visitFlow');
   });
+
+  // Quick-access reply keyboard buttons (shown after /start)
+  bot.hears('🏪 Log Visit', async (ctx) => {
+    const user = requireAuth(ctx);
+    if (!user) return;
+    await ctx.conversation.enter('visitFlow');
+  });
+  bot.hears('🕒 Recent Visits', handleMyVisits);
+  bot.hears('🔗 Links', handleLinks);
 
   // Photo debounce handler — runs after conversation exits, catches album photos
   bot.on('message:photo', async (ctx) => {

@@ -35,7 +35,7 @@ export function buildStoreContextMessage(
     const label = lastVisitLabel(s.id, lastVisits);
     return `${icon} ${s.name} · ${label}`;
   });
-  return `🏪 Your stores\n\n${lines.join('\n')}`;
+  return `🏪 *Your Stores*\n\n${lines.join('\n')}`;
 }
 
 export function buildStorePicker(

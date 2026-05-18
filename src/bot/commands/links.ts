@@ -18,11 +18,11 @@ export async function handleLinks(ctx: BotContext): Promise<void> {
   const assetUrl = ASSET_VERIFICATION_URLS[user.market];
 
   await ctx.reply(
-    `📌 Quick links — pin this message for easy access\n\n` +
-    `📋 Store Objective sheet\n` +
+    `📌 *Quick Links* — pin this message for easy access\n\n` +
+    `📋 *Store Objective sheet*\n` +
     `${STORE_OBJECTIVE_URL}\n\n` +
-    `✅ Asset Verification form (${user.market})\n` +
+    `✅ *Asset Verification form* (${user.market})\n` +
     `${assetUrl}`,
-    { link_preview_options: { is_disabled: true } },
+    { parse_mode: 'Markdown', link_preview_options: { is_disabled: true } },
   );
 }

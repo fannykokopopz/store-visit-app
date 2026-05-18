@@ -22,6 +22,7 @@ export async function handleHelp(ctx: BotContext): Promise<void> {
   await ctx.reply(
     `📱 *Commands*\n\n` +
     `🏪 /visit — log a new store visit\n` +
+    `🕒 /myvisits — your last 5 visits\n` +
     `🔗 /links — store objective + asset verification links\n` +
     `✏️ /nickname — set your display name\n` +
     `🚫 /cancel — stop what you're doing\n` +

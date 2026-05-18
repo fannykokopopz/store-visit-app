@@ -1,6 +1,12 @@
-import { InlineKeyboard } from 'grammy';
+import { InlineKeyboard, Keyboard } from 'grammy';
 import { BotContext } from '../middleware/auth.js';
 import { getCMRecord } from '../../db/queries/cms.js';
+
+export const QUICK_ACCESS_KEYBOARD = new Keyboard()
+  .text('🏪 Log Visit').text('🕒 Recent Visits').row()
+  .text('🔗 Links')
+  .resized()
+  .persistent();
 
 export async function handleStart(ctx: BotContext): Promise<void> {
   const name = ctx.user?.nickname ?? ctx.user?.full_name?.split(' ')[0] ?? ctx.from?.first_name ?? 'there';
@@ -37,6 +43,6 @@ export async function handleStart(ctx: BotContext): Promise<void> {
     `✏️ /nickname — change your name\n` +
     `❓ /help — how it all works\n\n` +
     `You're in as *${ctx.user.role.toUpperCase()} · ${ctx.user.market}* ✅`,
-    { parse_mode: 'Markdown' },
+    { parse_mode: 'Markdown', reply_markup: QUICK_ACCESS_KEYBOARD },
   );
 }

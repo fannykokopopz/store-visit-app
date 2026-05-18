@@ -22,7 +22,7 @@ export async function handleMyVisits(ctx: BotContext): Promise<void> {
     keyboard.text(`📍 ${v.stores.name} — ${date}`, `viewvisit:${v.id}`).row();
   }
 
-  await ctx.reply(`*Your last ${visits.length} visit${visits.length === 1 ? '' : 's'}* — tap to view:`, {
+  await ctx.reply(`*Your Last ${visits.length} Visit${visits.length === 1 ? '' : 's'}* — tap to view:`, {
     parse_mode: 'Markdown',
     reply_markup: keyboard,
   });
