@@ -2,6 +2,7 @@ import { Api, InlineKeyboard } from 'grammy';
 import { supabase } from '../db/client.js';
 import { config } from '../config.js';
 import { getVisitCMs } from '../db/queries/visit-cms.js';
+import { getSetting } from '../db/queries/settings.js';
 
 interface BroadcastRow {
   id: string;
@@ -19,8 +20,9 @@ export async function broadcastVisitLocked(
   visitId: string,
   botApi: Api,
 ): Promise<void> {
-  if (!config.broadcast.chatId) {
-    console.log('[broadcast] BROADCAST_CHAT_ID not set — skipping');
+  const chatId = (await getSetting('broadcast_chat_id')) ?? config.broadcast.chatId;
+  if (!chatId) {
+    console.log('[broadcast] broadcast_chat_id not set (db or env) — skipping');
     return;
   }
   if (!config.broadcast.botUsername) {
@@ -61,7 +63,7 @@ export async function broadcastVisitLocked(
       `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}` +
       `?startapp=visit_${visitId}`;
 
-    await botApi.sendMessage(config.broadcast.chatId, text, {
+    await botApi.sendMessage(chatId, text, {
       reply_markup: new InlineKeyboard().url('View visit', deepLink),
       link_preview_options: { is_disabled: true },
     });

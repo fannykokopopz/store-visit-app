@@ -11,6 +11,7 @@ import { handleCancel } from './commands/cancel.js';
 import { handleGrantAccess } from './commands/admin/grant.js';
 import { handleRevokeAccess } from './commands/admin/revoke.js';
 import { handleListAccess } from './commands/admin/list.js';
+import { handleSetAlertGroup } from './commands/admin/setalertgroup.js';
 import { handleDashboard } from './commands/dashboard.js';
 import { visitFlow } from './conversations/visit-flow.js';
 import { joinRequestFlow } from './conversations/join-request.js';
@@ -316,12 +317,12 @@ export function createBot(): Bot<BotContext> {
   });
 
   function canApprove(user: CM | undefined): boolean {
-    return !!user && (user.role === 'admin' || user.role === 'am' || user.role === 'cmic');
+    return !!user && user.role === 'admin';
   }
 
   bot.callbackQuery(/^join:approve:(\d+):(SG|MY|HK|TH)$/, async (ctx) => {
     if (!canApprove(ctx.user)) {
-      await ctx.answerCallbackQuery({ text: 'Only managers can approve.', show_alert: true });
+      await ctx.answerCallbackQuery({ text: 'Only admins can approve join requests.', show_alert: true });
       return;
     }
     const m = ctx.callbackQuery.data.match(/^join:approve:(\d+):(SG|MY|HK|TH)$/)!;
@@ -362,7 +363,7 @@ export function createBot(): Bot<BotContext> {
 
   bot.callbackQuery(/^join:reject:(\d+)$/, async (ctx) => {
     if (!canApprove(ctx.user)) {
-      await ctx.answerCallbackQuery({ text: 'Only managers can reject.', show_alert: true });
+      await ctx.answerCallbackQuery({ text: 'Only admins can reject join requests.', show_alert: true });
       return;
     }
     const m = ctx.callbackQuery.data.match(/^join:reject:(\d+)$/)!;
@@ -397,6 +398,7 @@ export function createBot(): Bot<BotContext> {
   bot.command('grantaccess', handleGrantAccess);
   bot.command('revokeaccess', handleRevokeAccess);
   bot.command('listaccess', handleListAccess);
+  bot.command('setalertgroup', handleSetAlertGroup);
 
   bot.catch((err) => {
     const ctx = err.ctx;
