@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 const TABS = [
-  { href: "/",       label: "Overview"       },
-  { href: "/visits", label: "Store Updates"  },
-  { href: "/staff",  label: "Staff & Allies" },
+  { href: "/",                 label: "Overview"         },
+  { href: "/visits",           label: "Store Updates"    },
+  { href: "/staff",            label: "Store Staff"      },
+  { href: "/channel-managers", label: "Channel Managers" },
 ];
 
 interface Props {

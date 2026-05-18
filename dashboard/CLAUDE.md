@@ -5,7 +5,7 @@ AM/IC web dashboard for TC Store Visit App.
 ## Stack
 - Next.js 16 + Tailwind 4 + TypeScript
 - Same Supabase project as bot/miniapp (`sva` schema, service role)
-- Auth: Telegram Login Widget → signed session cookie
+- Auth: Telegram Login Widget → signed session cookie. **Dashboard is AM / CM IC / Admin only.** OAuth callback (`/api/auth/telegram`) looks up `sva.cms` by `telegram_id` and rejects plain CMs and non-registered users (redirect to `/login?error=cm_only|not_registered`). Role is baked into the cookie payload; middleware enforces it on every page/API request; API routes use `requireDashboardRole` as the security gate.
 
 ## Setup
 1. Copy `.env.example` → `.env.local`, fill in vars
@@ -27,7 +27,8 @@ AM/IC web dashboard for TC Store Visit App.
 ## Routes
 - `/` — Home: KPI cards + store status grid + **weekly payroll grid** (range chips + custom from/to, AM-grouped CM rows)
 - `/visits` — Store Updates: 2-up card grid; section chips are **single-section focus** (tap Good News → only Good News visits + only that section card per visit), not multi-select "has" filters; sections inside cards stack 1-column
-- `/staff` — Staff & Allies: store-grouped, ally toggle, training pills (count + last-trained + products) from `visit_staff` (mig 005); market chips + search + filter chips
+- `/staff` — Store Staff: store-grouped roster of store-side staff/allies, ally toggle, training pills (count + last-trained + products) from `visit_staff` (mig 005); market chips + search + filter chips
+- `/channel-managers` — Channel Managers: AM-grouped CM cards with assigned-store list + per-store unassign (×) + `+ Add store…` picker (scoped to CM's market). Writes to `sva.cm_store_assignments`.
 - `/login` — Telegram login widget
 - `/api/auth/telegram` — OAuth callback (public)
 - `/api/auth/me` — current session user
@@ -37,4 +38,6 @@ AM/IC web dashboard for TC Store Visit App.
 - `/api/payroll?from=&to=` — weekly payroll grid (added 2026-05-17). Default range: last 4 weeks. Co-CM credit via `sva.visit_cms` when available; falls back to lead CM only.
 - `/api/visits` — visit feed (GET, paginated, filterable)
 - `/api/staff` — staff list with training aggregates (GET) + ally toggle (PATCH)
+- `/api/cms` — active CMs with their assigned stores + all stores (GET, for Channel Managers tab)
+- `/api/cms/assignments` — assign (POST) / unassign (DELETE) — body `{ cm_telegram_id, store_id }`. Writes to `sva.cm_store_assignments`
 - `/api/filters` — CM + store options for filter dropdowns

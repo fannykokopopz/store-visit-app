@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
-import { getSessionFromRequest } from "@/lib/auth";
+import { requireDashboardRole } from "@/lib/auth";
 import { getAllStaff, setAllyStatus } from "@/lib/queries";
 
 export async function GET(req: NextRequest) {
-  if (!getSessionFromRequest(req)) {
+  if (!requireDashboardRole(req)) {
     return Response.json({ error: "Not authorised" }, { status: 401 });
   }
   const staff = await getAllStaff();
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!getSessionFromRequest(req)) {
+  if (!requireDashboardRole(req)) {
     return Response.json({ error: "Not authorised" }, { status: 401 });
   }
   const body = await req.json().catch(() => null);

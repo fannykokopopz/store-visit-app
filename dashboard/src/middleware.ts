@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const PUBLIC = ["/login", "/api/auth/", "/api/health"];
+const ALLOWED_ROLES = new Set(["am", "cmic", "admin"]);
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -16,6 +17,13 @@ export function middleware(req: NextRequest) {
     // atob is available in Edge runtime
     const data = JSON.parse(atob(session.slice(0, dot)));
     if (typeof data.exp !== "number" || data.exp < Date.now()) throw new Error();
+    if (!data.role || !ALLOWED_ROLES.has(data.role)) {
+      const url = new URL("/login", req.url);
+      url.searchParams.set("error", "cm_only");
+      const res = NextResponse.redirect(url);
+      res.cookies.delete("sva-dash-session");
+      return res;
+    }
   } catch {
     const res = NextResponse.redirect(new URL("/login", req.url));
     res.cookies.delete("sva-dash-session");

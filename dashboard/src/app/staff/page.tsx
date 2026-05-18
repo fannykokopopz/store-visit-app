@@ -135,7 +135,7 @@ export default function StaffPage() {
       <div className="page-content">
 
         <div style={{ marginBottom: 24 }}>
-          <h1 className="section-title" style={{ fontSize: 20, marginBottom: 4 }}>Staff &amp; Allies</h1>
+          <h1 className="section-title" style={{ fontSize: 20, marginBottom: 4 }}>Store Staff</h1>
           <p style={{ fontSize: 13, color: "var(--color-ink-300)" }}>
             {loading ? "Loading…" : `${filtered.length} of ${staff.length} staff · ${summary.allies} allies · ${summary.trained} trained`}
           </p>

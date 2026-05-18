@@ -8,7 +8,7 @@ export async function handleHelp(ctx: BotContext): Promise<void> {
   const managerBlock = manager
     ? `\n👥 *Manager commands*\n` +
       `/dashboard — open the team dashboard\n` +
-      `_(also: assign stores to CMs in the mini-app → Team tab)_\n`
+      `_(assign stores to CMs in the dashboard → Channel Managers tab)_\n`
     : '';
 
   const adminBlock = isAdmin

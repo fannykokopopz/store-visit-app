@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getSessionFromRequest } from "@/lib/auth";
+import { requireDashboardRole } from "@/lib/auth";
 import { getPayrollGrid } from "@/lib/queries";
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -13,7 +13,7 @@ function defaultRange(): { from: string; to: string } {
 }
 
 export async function GET(req: NextRequest) {
-  if (!getSessionFromRequest(req)) {
+  if (!requireDashboardRole(req)) {
     return Response.json({ error: "Not authorised" }, { status: 401 });
   }
   const url = new URL(req.url);

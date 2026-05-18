@@ -4,11 +4,15 @@ import type { NextRequest } from "next/server";
 export const COOKIE_NAME = "sva-dash-session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+export type DashboardRole = "am" | "cmic" | "admin";
+export const DASHBOARD_ROLES: DashboardRole[] = ["am", "cmic", "admin"];
+
 export interface SessionUser {
   id: number;
   first_name: string;
   last_name?: string;
   username?: string;
+  role: DashboardRole;
   exp: number;
 }
 
@@ -60,6 +64,13 @@ export function getSessionFromRequest(req: NextRequest): SessionUser | null {
   const cookie = req.cookies.get(COOKIE_NAME)?.value;
   if (!cookie) return null;
   return verifySessionCookie(cookie);
+}
+
+export function requireDashboardRole(req: NextRequest): SessionUser | null {
+  const session = getSessionFromRequest(req);
+  if (!session) return null;
+  if (!DASHBOARD_ROLES.includes(session.role)) return null;
+  return session;
 }
 
 export const COOKIE_OPTS = {

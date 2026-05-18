@@ -1,9 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+const ERROR_MESSAGES: Record<string, string> = {
+  not_registered: "This Telegram account isn't registered as a CM. Ask an admin to add you via /grantaccess.",
+  cm_only: "The dashboard is for AMs, CM ICs, and Admins only. CMs should use the Telegram bot or mini-app.",
+};
+
+function LoginContent() {
   const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? "";
+  const searchParams = useSearchParams();
+  const errorKey = searchParams.get("error");
+  const errorMsg = errorKey ? ERROR_MESSAGES[errorKey] ?? "Login failed. Please try again." : null;
 
   useEffect(() => {
     if (!botUsername) return;
@@ -37,6 +46,24 @@ export default function LoginPage() {
           TC Acoustic · Store Visit App
         </p>
 
+        {errorMsg && (
+          <div
+            style={{
+              background: "#FBE6E2",
+              color: "#B5331A",
+              border: "1px solid #F5BDA5",
+              borderRadius: 12,
+              padding: "10px 14px",
+              fontSize: 12,
+              fontWeight: 600,
+              marginBottom: 16,
+              textAlign: "left",
+            }}
+          >
+            {errorMsg}
+          </div>
+        )}
+
         {botUsername ? (
           <div id="tg-widget" className="flex justify-center" />
         ) : (
@@ -46,9 +73,17 @@ export default function LoginPage() {
         )}
 
         <p className="mt-6 text-xs" style={{ color: "var(--color-ink-300)" }}>
-          Log in with the same Telegram account registered in the bot.
+          AM / CM IC / Admin only. Log in with the same Telegram account registered in the bot.
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginContent />
+    </Suspense>
   );
 }

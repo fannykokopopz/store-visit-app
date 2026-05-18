@@ -40,7 +40,7 @@ export interface StaffRow {
 }
 
 export interface CMOption { telegram_id: number; name: string }
-export interface StoreOption { id: string; name: string; chain: string; tier: string | null }
+export interface StoreOption { id: string; name: string; chain: string; tier: string | null; market?: 'SG' | 'MY' | 'TH' | 'HK' }
 
 export interface TeamStats {
   visits_this_month: number;
@@ -226,7 +226,7 @@ export async function getCMsList(): Promise<CMOption[]> {
 export async function getStoresList(): Promise<StoreOption[]> {
   const { data } = await supabase
     .from("stores")
-    .select("id, name, chain, tier")
+    .select("id, name, chain, tier, market")
     .eq("is_active", true)
     .order("name");
   return (data ?? []) as StoreOption[];
@@ -417,6 +417,112 @@ export async function getStoreDashboard(storeId: string): Promise<{ store: Store
   }));
 
   return { store, visits };
+}
+
+export interface DashboardCM {
+  telegram_id: number;
+  full_name: string;
+  role: 'cm' | 'cmic' | 'am' | 'admin';
+  is_active: boolean;
+}
+
+export async function getCMByTelegramId(telegramId: number): Promise<DashboardCM | null> {
+  const { data } = await supabase
+    .from('cms')
+    .select('telegram_id, full_name, role, is_active')
+    .eq('telegram_id', telegramId)
+    .maybeSingle();
+  return (data as DashboardCM | null) ?? null;
+}
+
+// ─── Channel Managers + store assignments ─────────────────────────────────────
+
+export interface CMRow {
+  telegram_id: number;
+  full_name: string;
+  nickname: string | null;
+  role: 'cm' | 'cmic' | 'am' | 'admin';
+  market: 'SG' | 'MY' | 'TH' | 'HK';
+  am_telegram_id: number | null;
+  am_name: string | null;
+  assigned_stores: { id: string; name: string; chain: string; tier: 'T1' | 'T2' | 'T3' | 'T4' | null; market: 'SG' | 'MY' | 'TH' | 'HK' }[];
+}
+
+export async function getCMsWithAssignments(): Promise<CMRow[]> {
+  const { data: cmsRaw } = await supabase
+    .from('cms')
+    .select('telegram_id, full_name, nickname, role, market, am_telegram_id, is_active')
+    .eq('is_active', true)
+    .order('full_name');
+  const cms = (cmsRaw ?? []) as {
+    telegram_id: number;
+    full_name: string;
+    nickname: string | null;
+    role: 'cm' | 'cmic' | 'am' | 'admin';
+    market: 'SG' | 'MY' | 'TH' | 'HK';
+    am_telegram_id: number | null;
+    is_active: boolean;
+  }[];
+
+  const cmsById = new Map(cms.map((c) => [c.telegram_id, c]));
+
+  const { data: assignRaw } = await supabase
+    .from('cm_store_assignments')
+    .select('cm_telegram_id, store_id, stores(id, name, chain, tier, market)')
+    .eq('is_active', true);
+
+  type AssignRow = {
+    cm_telegram_id: number;
+    store_id: string;
+    stores: { id: string; name: string; chain: string; tier: 'T1' | 'T2' | 'T3' | 'T4' | null; market: 'SG' | 'MY' | 'TH' | 'HK' } | null;
+  };
+
+  const byCm = new Map<number, CMRow['assigned_stores']>();
+  for (const row of (assignRaw ?? []) as unknown as AssignRow[]) {
+    if (!row.stores) continue;
+    const list = byCm.get(row.cm_telegram_id) ?? [];
+    list.push(row.stores);
+    byCm.set(row.cm_telegram_id, list);
+  }
+
+  return cms.map((c) => {
+    const am = c.am_telegram_id ? cmsById.get(c.am_telegram_id) : null;
+    const stores = (byCm.get(c.telegram_id) ?? []).sort((a, b) => {
+      const c0 = a.chain.localeCompare(b.chain);
+      return c0 !== 0 ? c0 : a.name.localeCompare(b.name);
+    });
+    return {
+      telegram_id: c.telegram_id,
+      full_name: c.full_name,
+      nickname: c.nickname,
+      role: c.role,
+      market: c.market,
+      am_telegram_id: c.am_telegram_id,
+      am_name: am?.full_name ?? null,
+      assigned_stores: stores,
+    };
+  });
+}
+
+export async function assignStore(cmTelegramId: number, storeId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('cm_store_assignments')
+    .upsert(
+      { cm_telegram_id: cmTelegramId, store_id: storeId, is_active: true },
+      { onConflict: 'cm_telegram_id,store_id' },
+    );
+  if (error) console.error('assignStore error:', error);
+  return !error;
+}
+
+export async function unassignStore(cmTelegramId: number, storeId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('cm_store_assignments')
+    .delete()
+    .eq('cm_telegram_id', cmTelegramId)
+    .eq('store_id', storeId);
+  if (error) console.error('unassignStore error:', error);
+  return !error;
 }
 
 export async function setAllyStatus(staffId: string, isAlly: boolean): Promise<boolean> {
