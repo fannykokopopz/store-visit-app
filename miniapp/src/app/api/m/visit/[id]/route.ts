@@ -1,5 +1,10 @@
 import { authedCMFromRequest } from "@/lib/miniapp-auth";
-import { getFullVisitForCM, signPhotoUrls, updateVisitText } from "@/lib/queries";
+import {
+  getFullVisitForCM,
+  signPhotoUrls,
+  updateVisitText,
+  deleteVisitMA,
+} from "@/lib/queries";
 
 const TEXT_FIELDS = [
   "good_news",
@@ -33,13 +38,37 @@ export async function GET(
   }));
   const canEditCoCMs = visit.viewer_is_lead || cm.role !== "cm";
   const canEditTraining = visit.viewer_is_lead || cm.role !== "cm";
+  const canDelete = visit.viewer_is_lead || cm.role === "admin";
   return Response.json({
     visit,
     photoUrls: signedUrls, // back-compat for /edit page
     photos: photosWithUrls,
     canEditCoCMs,
     canEditTraining,
+    canDelete,
   });
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const cm = await authedCMFromRequest(req);
+  if (!cm) return Response.json({ error: "Not authorised" }, { status: 401 });
+
+  const { id } = await params;
+  const visit = await getFullVisitForCM(cm.telegram_id, id, cm.role);
+  if (!visit) return Response.json({ error: "Visit not found" }, { status: 404 });
+
+  const isLead = visit.cms.find((c) => c.role === "lead")?.telegram_id === cm.telegram_id;
+  const isAdmin = cm.role === "admin";
+  if (!isLead && !isAdmin) {
+    return Response.json({ error: "Not allowed to delete this visit" }, { status: 403 });
+  }
+
+  const ok = await deleteVisitMA(id);
+  if (!ok) return Response.json({ error: "Delete failed" }, { status: 500 });
+  return Response.json({ ok: true });
 }
 
 export async function PATCH(

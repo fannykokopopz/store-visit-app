@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { initTelegram } from "../../telegram-init";
 import { useSwipeBack } from "@/lib/useSwipeBack";
 
@@ -73,6 +74,7 @@ interface VisitPayload {
   photos: PhotoWithSection[];
   canEditCoCMs: boolean;
   canEditTraining: boolean;
+  canDelete: boolean;
 }
 
 interface MarketCM { telegram_id: number; name: string }
@@ -184,6 +186,7 @@ export default function VisitPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
   const [data, setData] = useState<VisitPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -200,6 +203,9 @@ export default function VisitPage({
   const [addingStaff, setAddingStaff] = useState(false);
   const [newStaffName, setNewStaffName] = useState("");
   const [creatingStaff, setCreatingStaff] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   useSwipeBack();
 
   useEffect(() => {
@@ -368,7 +374,29 @@ export default function VisitPage({
     );
   }
 
-  const { visit, photoUrls, canEditCoCMs, canEditTraining } = data;
+  const { visit, photoUrls, canEditCoCMs, canEditTraining, canDelete } = data;
+
+  async function handleDelete() {
+    if (!initData || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/m/visit/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `tma ${initData}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setDeleteError(body.error ?? `Failed (${res.status})`);
+        return;
+      }
+      router.replace(`/m/store/${visit.store_id}`);
+    } catch (e) {
+      setDeleteError(String(e));
+    } finally {
+      setDeleting(false);
+    }
+  }
   const photosWithSection: PhotoWithSection[] = data.photos ?? [];
   const lead = visit.cms.find((c) => c.role === 'lead');
   const cos = visit.cms.filter((c) => c.role === 'co');
@@ -463,12 +491,23 @@ export default function VisitPage({
               )}
             </div>
           </div>
-          <Link
-            href={`/m/visit/${visit.id}/edit`}
-            className="shrink-0 rounded-xl bg-ink-50 px-3 py-1.5 text-[11px] font-bold text-ink-400 active:bg-ink-100"
-          >
-            Edit
-          </Link>
+          <div className="shrink-0 flex items-center gap-1.5">
+            <Link
+              href={`/m/visit/${visit.id}/edit`}
+              className="rounded-xl bg-ink-50 px-3 py-1.5 text-[11px] font-bold text-ink-400 active:bg-ink-100"
+            >
+              Edit
+            </Link>
+            {canDelete && (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="rounded-xl px-3 py-1.5 text-[11px] font-bold text-rose-600 active:bg-rose-50"
+              >
+                Delete
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -844,6 +883,44 @@ export default function VisitPage({
                 style={{ background: "var(--color-tc-600)" }}
               >
                 {savingCMs ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Delete confirmation */}
+      {confirmDelete && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => !deleting && setConfirmDelete(false)} />
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-xl">
+            <div className="w-8 h-1 bg-ink-200 rounded-full mx-auto mb-4" />
+            <h2 className="text-base font-extrabold text-ink-700 mb-1">Delete this visit?</h2>
+            <p className="text-[12px] text-ink-400 leading-relaxed mb-4">
+              This will remove the visit at <strong>{visit.store_name}</strong> on{" "}
+              {fmtDate(visit.visit_date)}, all {photoUrls.length}{" "}
+              {photoUrls.length === 1 ? "photo" : "photos"}, follow-ups, and training records.
+              This can&apos;t be undone.
+            </p>
+            {deleteError && (
+              <p className="text-[12px] text-rose-600 mb-3">{deleteError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="flex-1 rounded-xl py-3 text-sm font-bold bg-ink-100 text-ink-500 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 rounded-xl py-3 text-sm font-bold bg-rose-600 text-white disabled:opacity-50"
+              >
+                {deleting ? "Deleting…" : "Yes, delete"}
               </button>
             </div>
           </div>

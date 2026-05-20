@@ -678,6 +678,30 @@ export async function markFollowUpDoneMA(id: string): Promise<boolean> {
   return !error;
 }
 
+// Hard delete. DB-first → storage-second so storage hiccups don't leave
+// orphan rows. Mirrors src/db/queries/visits.ts:deleteVisit.
+export async function deleteVisitMA(visitId: string): Promise<boolean> {
+  const { data: photos } = await supabase
+    .from("visit_photos")
+    .select("storage_path")
+    .eq("visit_id", visitId);
+
+  const { error: delErr } = await supabase.from("visits").delete().eq("id", visitId);
+  if (delErr) {
+    console.error("deleteVisitMA DB error:", delErr);
+    return false;
+  }
+
+  const paths = ((photos ?? []) as { storage_path: string | null }[])
+    .map((p) => p.storage_path)
+    .filter((p): p is string => Boolean(p));
+  if (paths.length > 0) {
+    const { error: storErr } = await supabase.storage.from("sva-photos").remove(paths);
+    if (storErr) console.error("deleteVisitMA storage cleanup error:", storErr);
+  }
+  return true;
+}
+
 export async function updateVisitStaffProducts(
   visitId: string,
   updates: Array<{ staff_id: string; products: string | null }>,

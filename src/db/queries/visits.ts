@@ -345,27 +345,28 @@ export async function setVisitFollowUpText(
 }
 
 export async function deleteVisit(visitId: string): Promise<boolean> {
-  // Fetch photo storage paths before deleting
+  // DB-first: drop the row (cascades to visit_photos/visit_cms/visit_staff/
+  // insights/visit_follow_ups), then try storage cleanup. If storage fails
+  // we still report success — the user sees the visit gone, and stray bytes
+  // can be swept by a future janitor. Order matters: if storage runs first
+  // and DB fails, we'd be left with rows pointing at gone files.
   const { data: photos } = await supabase
     .from('visit_photos')
     .select('storage_path')
     .eq('visit_id', visitId);
 
-  if (photos && photos.length > 0) {
-    const paths = photos.map((p: any) => p.storage_path).filter(Boolean);
-    if (paths.length > 0) {
-      await supabase.storage.from('sva-photos').remove(paths);
-    }
+  const { error: delErr } = await supabase.from('visits').delete().eq('id', visitId);
+  if (delErr) {
+    console.error('deleteVisit DB error:', delErr);
+    return false;
   }
 
-  const { error } = await supabase
-    .from('visits')
-    .delete()
-    .eq('id', visitId);
-
-  if (error) {
-    console.error('deleteVisit error:', error);
-    return false;
+  const paths = (photos ?? [])
+    .map((p: { storage_path: string | null }) => p.storage_path)
+    .filter((p): p is string => Boolean(p));
+  if (paths.length > 0) {
+    const { error: storErr } = await supabase.storage.from('sva-photos').remove(paths);
+    if (storErr) console.error('deleteVisit storage cleanup error:', storErr);
   }
   return true;
 }
