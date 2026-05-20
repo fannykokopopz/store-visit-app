@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "TC Store Visit App — AM/IC Dashboard",
-  "engines": { "node": ">=20.9.0" },
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,7 +15,9 @@
     "@supabase/supabase-js": "^2.104.1",
     "next": "16.2.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

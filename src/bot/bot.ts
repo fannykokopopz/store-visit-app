@@ -2,6 +2,7 @@ import { Bot, InlineKeyboard, session } from 'grammy';
 import { conversations, createConversation } from '@grammyjs/conversations';
 import { config } from '../config.js';
 import { BotContext, authMiddleware, requireAuth } from './middleware/auth.js';
+import { escapeHatchMiddleware } from './middleware/escape-hatch.js';
 import { handleStart } from './commands/start.js';
 import { handleHelp } from './commands/help.js';
 import { handleLinks } from './commands/links.js';
@@ -13,6 +14,7 @@ import { handleGrantAccess } from './commands/admin/grant.js';
 import { handleRevokeAccess } from './commands/admin/revoke.js';
 import { handleListAccess } from './commands/admin/list.js';
 import { handleSetAlertGroup } from './commands/admin/setalertgroup.js';
+import { handleRunIntelligence } from './commands/admin/runintelligence.js';
 import { handleDashboard } from './commands/dashboard.js';
 import { visitFlow } from './conversations/visit-flow.js';
 import { joinRequestFlow } from './conversations/join-request.js';
@@ -30,6 +32,7 @@ export function createBot(): Bot<BotContext> {
   bot.use(session({ initial: () => ({}) }));
   bot.use(conversations());
   bot.use(authMiddleware);
+  bot.use(escapeHatchMiddleware);
 
   bot.use(createConversation(visitFlow));
   bot.use(createConversation(joinRequestFlow));
@@ -410,6 +413,7 @@ export function createBot(): Bot<BotContext> {
   bot.command('revokeaccess', handleRevokeAccess);
   bot.command('listaccess', handleListAccess);
   bot.command('setalertgroup', handleSetAlertGroup);
+  bot.command('runintelligence', handleRunIntelligence);
 
   bot.catch((err) => {
     const ctx = err.ctx;

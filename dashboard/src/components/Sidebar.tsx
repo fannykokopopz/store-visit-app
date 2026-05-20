@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 const NAV = [
   { href: "/", label: "Overview", icon: "◈" },
   { href: "/visits", label: "Visits", icon: "📋" },
+  { href: "/intelligence", label: "Intelligence", icon: "🧠" },
   { href: "/staff", label: "Staff & Allies", icon: "👥" },
 ];
 

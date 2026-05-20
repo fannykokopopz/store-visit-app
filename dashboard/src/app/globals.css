@@ -765,3 +765,107 @@ table.payroll-grid tbody tr:last-child td { border-bottom: none; }
   color: var(--color-ink-400);
   background: var(--color-ink-50);
 }
+
+/* ── Markdown rendering for intelligence briefs + memory notes ──────────── */
+.markdown-brief {
+  color: var(--color-ink-700);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.markdown-brief h1 {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--color-ink-900);
+  letter-spacing: -0.4px;
+  margin: 0 0 18px;
+  line-height: 1.2;
+}
+.markdown-brief h2 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-ink-900);
+  letter-spacing: -0.2px;
+  margin: 28px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+  line-height: 1.3;
+}
+.markdown-brief h2:first-child { margin-top: 0; }
+.markdown-brief h3 {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--color-ink-900);
+  margin: 18px 0 6px;
+}
+.markdown-brief p { margin: 0 0 12px; }
+.markdown-brief ul, .markdown-brief ol { margin: 0 0 14px; padding-left: 20px; }
+.markdown-brief ul li {
+  list-style: none;
+  position: relative;
+  padding-left: 14px;
+  margin-bottom: 4px;
+}
+.markdown-brief ul li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--color-tc-500);
+  font-weight: 800;
+}
+.markdown-brief ol li { margin-bottom: 4px; list-style: decimal; }
+.markdown-brief strong { font-weight: 800; color: var(--color-ink-900); }
+.markdown-brief em { font-style: italic; color: var(--color-ink-500); }
+.markdown-brief code {
+  background: var(--color-ink-50);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  font-family: ui-monospace, "SF Mono", monospace;
+}
+.markdown-brief hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 18px 0;
+}
+.markdown-brief blockquote {
+  border-left: 3px solid var(--color-tc-500);
+  padding: 4px 0 4px 14px;
+  margin: 12px 0;
+  color: var(--color-ink-500);
+  font-style: italic;
+}
+.markdown-brief table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0 18px;
+  font-size: 13px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.markdown-brief thead { background: var(--color-ink-50); }
+.markdown-brief th {
+  text-align: left;
+  font-weight: 800;
+  color: var(--color-ink-900);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.markdown-brief td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-ink-700);
+  vertical-align: top;
+}
+.markdown-brief tbody tr:last-child td { border-bottom: none; }
+.markdown-brief tbody tr:hover { background: var(--color-ink-50); }
+.markdown-brief a {
+  color: var(--color-tc-600);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
