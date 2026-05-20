@@ -12,6 +12,7 @@ import { initTelegram, getStartParam } from "./telegram-init";
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const VISIT_TRAINING = new RegExp(`^visit_(${UUID})_training$`, "i");
 const VISIT_FOLLOWUP = new RegExp(`^visit_(${UUID})_followup$`, "i");
+const VISIT_EDIT = new RegExp(`^visit_(${UUID})_edit$`, "i");
 const VISIT_BARE = new RegExp(`^visit_(${UUID})$`, "i");
 
 export default function MiniappRoot() {
@@ -30,6 +31,10 @@ export default function MiniappRoot() {
         }
         if ((m = VISIT_FOLLOWUP.exec(param))) {
           router.replace(`/m/visit/${m[1]}/followup`);
+          return;
+        }
+        if ((m = VISIT_EDIT.exec(param))) {
+          router.replace(`/m/visit/${m[1]}/edit`);
           return;
         }
         if ((m = VISIT_BARE.exec(param))) {

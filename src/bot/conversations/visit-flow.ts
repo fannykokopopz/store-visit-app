@@ -118,8 +118,11 @@ function buildDoneKeyboard(visitId: string): InlineKeyboard {
   if (config.broadcast.botUsername) {
     const base = `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}`;
     kb.url('🔍 Open in mini-app', `${base}?startapp=visit_${visitId}`).row();
+    // Edit deep-links into the mini-app editor (4 sections + photos +
+    // follow-ups), bypassing the legacy bot-side step picker / template-paste.
+    kb.url('✏️ Edit', `${base}?startapp=visit_${visitId}_edit`);
   }
-  kb.text('✏️ Edit', `edit:${visitId}`).text('🗑️ Delete', `delete:${visitId}`);
+  kb.text('🗑️ Delete', `delete:${visitId}`);
   return kb;
 }
 

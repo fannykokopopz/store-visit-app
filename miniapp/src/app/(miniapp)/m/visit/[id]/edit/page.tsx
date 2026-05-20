@@ -12,6 +12,7 @@ interface FullVisit {
   store_name: string;
   visit_date: string;
   good_news: string | null;
+  people_training: string | null;
   competitors: string | null;
   display_stock: string | null;
   follow_up: string | null;
@@ -20,7 +21,13 @@ interface FullVisit {
   is_locked: boolean;
 }
 
-type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan";
+type SectionKey =
+  | "good_news"
+  | "people_training"
+  | "competitors"
+  | "display_stock"
+  | "follow_up"
+  | "buzz_plan";
 
 const SECTIONS: Array<{
   key: SectionKey;
@@ -29,22 +36,31 @@ const SECTIONS: Array<{
   iconBgClass: string;
   titleClass: string;
   placeholder: string;
+  legacy?: boolean;
 }> = [
   {
     key: "good_news",
     label: "Good News",
-    icon: "🌟",
+    icon: "🎉",
     iconBgClass: "bg-[var(--color-section-amber-bg)]",
     titleClass: "text-[var(--color-tc-600)]",
-    placeholder: "Any wins, positive feedback, or good moments from the visit…",
+    placeholder: "Wins, breakthroughs, customer compliments, staff good news…",
+  },
+  {
+    key: "people_training",
+    label: "People & Training",
+    icon: "👥",
+    iconBgClass: "bg-[var(--color-section-teal-bg)]",
+    titleClass: "text-[var(--color-section-teal-fg)]",
+    placeholder: "Who you engaged, what you talked about, how they responded…",
   },
   {
     key: "competitors",
-    label: "Competitors' Insights",
+    label: "Competitor Insights",
     icon: "🔍",
     iconBgClass: "bg-[var(--color-section-blue-bg)]",
     titleClass: "text-[var(--color-tier-t1-fg)]",
-    placeholder: "What are competitors doing? Pricing, promotions, new products…",
+    placeholder: "Bose / Sony / JBL — promos, products, POS, gossip from staff…",
   },
   {
     key: "display_stock",
@@ -52,23 +68,25 @@ const SECTIONS: Array<{
     icon: "📦",
     iconBgClass: "bg-[var(--color-section-green-bg)]",
     titleClass: "text-[var(--color-tier-t2-fg)]",
-    placeholder: "Display condition, stock levels, any gaps or issues…",
+    placeholder: "Display health, stock levels, POSM/buzz materials, new spaces…",
   },
   {
     key: "follow_up",
-    label: "What to Follow Up",
+    label: "Follow-up (legacy text)",
     icon: "✅",
     iconBgClass: "bg-[var(--color-section-pink-bg)]",
     titleClass: "text-[#C0185A]",
-    placeholder: "Action items, things to chase up with the store or team…",
+    placeholder: "Structured follow-ups live in the follow-ups list — this is the legacy freetext column.",
+    legacy: true,
   },
   {
     key: "buzz_plan",
-    label: "Buzz Plan",
+    label: "Buzz Plan (legacy)",
     icon: "⚡",
     iconBgClass: "bg-[var(--color-section-purple-bg)]",
     titleClass: "text-[#5B2DB5]",
-    placeholder: "Planned activities, events, or engagement ideas for this store…",
+    placeholder: "Planned activities (legacy column — v2 visits don't write here).",
+    legacy: true,
   },
 ];
 
@@ -93,6 +111,7 @@ export default function EditVisitPage({
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [fields, setFields] = useState<Record<SectionKey, string>>({
     good_news: "",
+    people_training: "",
     competitors: "",
     display_stock: "",
     follow_up: "",
@@ -124,6 +143,7 @@ export default function EditVisitPage({
       setPhotoUrls(data.photoUrls ?? []);
       setFields({
         good_news: data.visit.good_news ?? "",
+        people_training: data.visit.people_training ?? "",
         competitors: data.visit.competitors ?? "",
         display_stock: data.visit.display_stock ?? "",
         follow_up: data.visit.follow_up ?? "",
@@ -266,9 +286,9 @@ export default function EditVisitPage({
         </div>
       </div>
 
-      {/* Section textareas */}
+      {/* Section textareas — legacy sections render only if they have content. */}
       <div className="space-y-2 px-3.5 mt-4">
-        {SECTIONS.map((s) => (
+        {SECTIONS.filter((s) => !s.legacy || fields[s.key].trim().length > 0).map((s) => (
           <div key={s.key} className="rounded-[18px] border border-ink-100 bg-white p-4">
             <div className="flex items-center gap-2 mb-3">
               <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm ${s.iconBgClass}`}>
@@ -287,6 +307,30 @@ export default function EditVisitPage({
             />
           </div>
         ))}
+
+        {/* Follow-ups manager — go to the structured form */}
+        <div className="rounded-[18px] border border-ink-100 bg-white p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-section-pink-bg)] text-sm">
+                ✅
+              </span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#C0185A]">
+                Follow-ups
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push(`/m/visit/${id}/followup`)}
+              className="rounded-full bg-[var(--color-section-pink-bg)] px-2.5 py-0.5 text-[11px] font-bold text-[#C0185A]"
+            >
+              Manage
+            </button>
+          </div>
+          <p className="mt-2 text-[12px] text-ink-300">
+            Structured follow-ups live in their own form. Tap Manage to add or update them.
+          </p>
+        </div>
       </div>
 
       {/* Sticky save bar */}
