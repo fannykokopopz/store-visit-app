@@ -6,19 +6,112 @@ import { searchStoresByName, getStoreById } from '../../db/queries/stores.js';
 import {
   createVisit,
   lockVisit,
-  attachVisitSections,
-  setVisitGrade,
+  persistVisitSection,
+  setVisitFollowUpText,
+  getFullVisit,
   getLastVisitDatePerStore,
+  V2_PROMPT_COLUMN,
+  type V2PromptKey,
+  type Visit,
 } from '../../db/queries/visits.js';
 import { setVisitCMs } from '../../db/queries/visit-cms.js';
 import { getActivePlan, consumePlan } from '../../db/queries/visit-plans.js';
-import { buildStorePicker, buildSearchResultsPicker, buildStoreContextMessage } from '../keyboards/store-picker.js';
-import { buildTemplateMessage } from '../../utils/template.js';
-import { parseTemplate, filledCount } from '../../utils/parse-template.js';
-import { startPhotoCollection, handleIncomingPhoto, awaitPhotoUpload } from '../photo-collection.js';
+import {
+  createFollowUp,
+  listFollowUpsForVisit,
+} from '../../db/queries/visit-follow-ups.js';
+import {
+  buildStorePicker,
+  buildSearchResultsPicker,
+  buildStoreContextMessage,
+} from '../keyboards/store-picker.js';
+import {
+  startPhotoCollection,
+  handleIncomingPhoto,
+  setActiveSection,
+  awaitPhotoUpload,
+} from '../photo-collection.js';
 import { sendVisitDetails } from '../visit-details.js';
 import { broadcastVisitLocked } from '../../notifications/visit-broadcast.js';
 import { config } from '../../config.js';
+import type { SectionKey } from '../../db/queries/photos.js';
+
+type VisitConversation = Conversation<BotContext, BotContext>;
+
+interface PromptDef {
+  key: V2PromptKey;
+  emoji: string;
+  question: string;
+  cue: string;
+  showTrainingButton?: boolean;
+}
+
+const PROMPTS: PromptDef[] = [
+  {
+    key: 'good_news',
+    emoji: '🎉',
+    question: 'Any wins today?',
+    cue: 'Sales moved, SM breakthrough, customer compliment, staff Good News…',
+  },
+  {
+    key: 'people_training',
+    emoji: '👥',
+    question: 'People & training today?',
+    cue: "Who'd you engage, what did you talk about, how did they respond?\nTrained someone on specific products? Tap *Log Training* to record details.",
+    showTrainingButton: true,
+  },
+  {
+    key: 'competitor',
+    emoji: '🔍',
+    question: 'Competition doing anything?',
+    cue: 'Bose / Sony / JBL — promos, products, POS, gossip from staff…',
+  },
+  {
+    key: 'display_stock',
+    emoji: '📦',
+    question: 'Display & Stock — anything to flag?',
+    cue: 'Display health, stock levels, POSM/buzz materials up, new spaces conquered?',
+  },
+];
+
+function trainingDeepLink(visitId: string): string | null {
+  if (!config.broadcast.botUsername) return null;
+  return (
+    `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}` +
+    `?startapp=visit_${visitId}_training`
+  );
+}
+
+function followUpDeepLink(visitId: string): string | null {
+  if (!config.broadcast.botUsername) return null;
+  return (
+    `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}` +
+    `?startapp=visit_${visitId}_followup`
+  );
+}
+
+function buildPromptKeyboard(
+  visitId: string,
+  prompt: PromptDef,
+  showSkipRest: boolean,
+): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  if (prompt.showTrainingButton) {
+    const link = trainingDeepLink(visitId);
+    if (link) kb.url('📋 Log Training', link).row();
+  }
+  kb.text('Skip', `prompt:skip:${prompt.key}`);
+  if (showSkipRest) kb.text('Skip rest →', 'prompt:skiprest');
+  return kb;
+}
+
+function buildFollowUpKeyboard(visitId: string): InlineKeyboard {
+  const kb = new InlineKeyboard();
+  const link = followUpDeepLink(visitId);
+  if (link) kb.url('📋 Add in Mini-App', link).row();
+  kb.text('Skip', 'followup:skip').text('✅ Done', 'followup:done');
+  return kb;
+}
 
 function buildDoneKeyboard(visitId: string): InlineKeyboard {
   const kb = new InlineKeyboard();
@@ -30,469 +123,385 @@ function buildDoneKeyboard(visitId: string): InlineKeyboard {
   return kb;
 }
 
-type VisitConversation = Conversation<BotContext, BotContext>;
+function formatPrompt(idx: number, total: number, p: PromptDef): string {
+  return `*${idx + 1}/${total}* ${p.emoji} *${p.question}*\n_${p.cue}_`;
+}
 
-export async function visitFlow(conversation: VisitConversation, ctx: BotContext): Promise<void> {
+// Visits use the visit_photos.section_key enum 'follow_up' for the close-out
+// step; PROMPTS keys map 1:1 except 'competitor' → 'competitor' (singular).
+function sectionKeyForPrompt(key: V2PromptKey): SectionKey {
+  return key as SectionKey;
+}
+
+export async function visitFlow(
+  conversation: VisitConversation,
+  ctx: BotContext,
+  resumeVisitId?: string,
+): Promise<void> {
   const telegramId = ctx.from?.id;
   if (!telegramId) return;
 
-  // ── Store pick (entry) ─────────────────────────────────────────────────────
-
-  const [stores, lastVisits] = await conversation.external(async () => {
-    const s = await getStoresForCM(telegramId);
-    const lv = await getLastVisitDatePerStore(telegramId);
-    return [s, lv] as const;
-  });
-
-  if (stores.length === 0) {
-    await ctx.reply("No stores assigned yet — ask your manager to set this up 🙏");
-    return;
-  }
-
-  // Merged: store context + "which store?" in one message
-  let page = 0;
-  await ctx.reply(
-    `${buildStoreContextMessage(stores, lastVisits)}\n\nWhich store did you visit?\n_/cancel to stop_`,
-    {
-      parse_mode: 'Markdown',
-      reply_markup: buildStorePicker(stores, lastVisits, page),
-    },
-  );
-
+  let visit: Visit | null = null;
   let storeId = '';
   let storeName = '';
 
-  storeLoop: while (true) {
-    const update = await conversation.wait();
+  // ── Resume path: skip store-pick, load existing draft ─────────────────────
+  if (resumeVisitId) {
+    const existing = await conversation.external(() => getFullVisit(resumeVisitId));
+    if (!existing || existing.cm_telegram_id !== telegramId) {
+      await ctx.reply("Couldn't find your draft visit — give /visit a fresh try 🙏");
+      return;
+    }
+    visit = existing;
+    storeId = existing.store_id;
+    storeName = existing.store_name;
+    await ctx.reply(
+      `▶️ *Resuming visit at ${storeName}* — picking up where you left off.`,
+      { parse_mode: 'Markdown' },
+    );
+  } else {
+    // ── Store pick (entry) ────────────────────────────────────────────────────
+    const [stores, lastVisits] = await conversation.external(async () => {
+      const s = await getStoresForCM(telegramId);
+      const lv = await getLastVisitDatePerStore(telegramId);
+      return [s, lv] as const;
+    });
 
-    if (update.message?.text === '/cancel') {
-      await ctx.reply("No worries — come back whenever you're ready 👋");
+    if (stores.length === 0) {
+      await ctx.reply("No stores assigned yet — ask your manager to set this up 🙏");
       return;
     }
 
-    if (!update.callbackQuery) continue;
+    let page = 0;
+    await ctx.reply(
+      `${buildStoreContextMessage(stores, lastVisits)}\n\nWhich store did you visit?\n_/cancel to stop_`,
+      { parse_mode: 'Markdown', reply_markup: buildStorePicker(stores, lastVisits, page) },
+    );
 
-    const data = update.callbackQuery.data ?? '';
+    storeLoop: while (true) {
+      const update = await conversation.wait();
 
-    if (data === 'cancel') {
-      await update.answerCallbackQuery();
-      await ctx.reply("No worries — come back whenever you're ready 👋");
-      return;
-    }
+      if (update.message?.text === '/cancel') {
+        await ctx.reply("No worries — come back whenever you're ready 👋");
+        return;
+      }
+      if (!update.callbackQuery) continue;
 
-    if (data.startsWith('page:')) {
-      page = parseInt(data.replace('page:', ''), 10);
-      await update.answerCallbackQuery();
-      await update.editMessageReplyMarkup({
-        reply_markup: buildStorePicker(stores, lastVisits, page),
-      });
-      continue;
-    }
+      const data = update.callbackQuery.data ?? '';
 
-    if (data === 'search:stores') {
-      await update.answerCallbackQuery();
-      await ctx.reply('Type part of the store name:');
+      if (data === 'cancel') {
+        await update.answerCallbackQuery();
+        await ctx.reply("No worries — come back whenever you're ready 👋");
+        return;
+      }
 
-      while (true) {
-        const searchMsg = await conversation.wait();
-        if (searchMsg.message?.text === '/cancel') {
-          await ctx.reply("No worries — come back whenever you're ready 👋");
-          return;
+      if (data.startsWith('page:')) {
+        page = parseInt(data.replace('page:', ''), 10);
+        await update.answerCallbackQuery();
+        await update.editMessageReplyMarkup({
+          reply_markup: buildStorePicker(stores, lastVisits, page),
+        });
+        continue;
+      }
+
+      if (data === 'search:stores') {
+        await update.answerCallbackQuery();
+        await ctx.reply('Type part of the store name:');
+
+        while (true) {
+          const searchMsg = await conversation.wait();
+          if (searchMsg.message?.text === '/cancel') {
+            await ctx.reply("No worries — come back whenever you're ready 👋");
+            return;
+          }
+          const term = searchMsg.message?.text?.trim();
+          if (!term) continue;
+
+          const market = ctx.user?.market ?? 'SG';
+          const results = await conversation.external(() => searchStoresByName(market, term));
+
+          if (results.length === 0) {
+            await ctx.reply("No stores found — try a different search term.", {
+              reply_markup: new InlineKeyboard()
+                .text('← Back to my stores', 'search:back').row()
+                .text('Cancel', 'cancel'),
+            });
+          } else {
+            await ctx.reply('Pick a store:', { reply_markup: buildSearchResultsPicker(results) });
+          }
+
+          const pick = await conversation.wait();
+
+          if (pick.message?.text === '/cancel') {
+            await ctx.reply("No worries — come back whenever you're ready 👋");
+            return;
+          }
+          if (!pick.callbackQuery) continue;
+
+          const pickData = pick.callbackQuery.data ?? '';
+
+          if (pickData === 'cancel') {
+            await pick.answerCallbackQuery();
+            await ctx.reply("No worries — come back whenever you're ready 👋");
+            return;
+          }
+          if (pickData === 'search:back') {
+            await pick.answerCallbackQuery();
+            await ctx.reply('Which store did you visit?', {
+              reply_markup: buildStorePicker(stores, lastVisits, page),
+            });
+            continue storeLoop;
+          }
+          if (pickData.startsWith('store:')) {
+            storeId = pickData.replace('store:', '');
+            const found = await conversation.external(() => getStoreById(storeId));
+            if (!found) continue;
+            storeName = found.name;
+            await pick.answerCallbackQuery();
+            break storeLoop;
+          }
         }
+      }
 
-        const term = searchMsg.message?.text?.trim();
-        if (!term) continue;
-
-        const market = ctx.user?.market ?? 'SG';
-        const results = await conversation.external(() => searchStoresByName(market, term));
-
-        if (results.length === 0) {
-          await ctx.reply("No stores found — try a different search term.", {
-            reply_markup: new InlineKeyboard()
-              .text('← Back to my stores', 'search:back').row()
-              .text('Cancel', 'cancel'),
-          });
-        } else {
-          await ctx.reply('Pick a store:', {
-            reply_markup: buildSearchResultsPicker(results),
-          });
-        }
-
-        const pick = await conversation.wait();
-
-        if (pick.message?.text === '/cancel') {
-          await ctx.reply("No worries — come back whenever you're ready 👋");
-          return;
-        }
-        if (!pick.callbackQuery) continue;
-
-        const pickData = pick.callbackQuery.data ?? '';
-
-        if (pickData === 'cancel') {
-          await pick.answerCallbackQuery();
-          await ctx.reply("No worries — come back whenever you're ready 👋");
-          return;
-        }
-        if (pickData === 'search:back') {
-          await pick.answerCallbackQuery();
-          await ctx.reply('Which store did you visit?', {
-            reply_markup: buildStorePicker(stores, lastVisits, page),
-          });
-          continue storeLoop;
-        }
-
-        if (pickData.startsWith('store:')) {
-          storeId = pickData.replace('store:', '');
-          const found = await conversation.external(() => getStoreById(storeId));
-          if (!found) continue;
+      if (data.startsWith('store:')) {
+        storeId = data.replace('store:', '');
+        const found = stores.find(s => s.id === storeId);
+        if (found) {
           storeName = found.name;
-          await pick.answerCallbackQuery();
-          break storeLoop;
+        } else {
+          const fetched = await conversation.external(() => getStoreById(storeId));
+          if (!fetched) continue;
+          storeName = fetched.name;
         }
+        await update.answerCallbackQuery();
+        break;
       }
     }
 
-    if (data.startsWith('store:')) {
-      storeId = data.replace('store:', '');
-      const found = stores.find(s => s.id === storeId);
-      if (found) {
-        storeName = found.name;
-      } else {
-        const fetched = await conversation.external(() => getStoreById(storeId));
-        if (!fetched) continue;
-        storeName = fetched.name;
-      }
-      await update.answerCallbackQuery();
-      break;
+    // ── Create draft visit upfront so photos + save-as-you-go can stream into it
+    visit = await conversation.external(async () => {
+      const v = await createVisit({
+        store_id: storeId,
+        cm_telegram_id: telegramId,
+        grade: null,
+        grade_comments: null,
+      });
+      if (!v) return null;
+      await setVisitCMs(v.id, telegramId, []);
+      return v;
+    });
+
+    if (!visit) {
+      await ctx.reply("Something went wrong — give /visit another try 🙏");
+      return;
     }
   }
 
   // ── Consume active plan if any (silent) ───────────────────────────────────
-
   const plan = await conversation.external(() => getActivePlan(telegramId, storeId));
 
-  // ── Step 1/3: Notes (template + paste) ─────────────────────────────────────
+  // ── Start photo collection. Photos sent any time during the flow attach to
+  //    whatever section is currently active (set per prompt).
+  const createdVisitId = visit.id;
+  await conversation.external(() => {
+    startPhotoCollection(telegramId, createdVisitId, storeId, storeName, PROMPTS.length);
+  });
 
-  await ctx.reply(
-    `📝 *Step 1 of 3 — Notes*\n\n` + buildTemplateMessage(storeName),
+  // ── 4 prompts ─────────────────────────────────────────────────────────────
+  const answers: Partial<Record<V2PromptKey, string | null>> = {
+    good_news: visit.good_news,
+    people_training: visit.people_training,
+    competitor: visit.competitors,
+    display_stock: visit.display_stock,
+  };
 
-    { parse_mode: 'MarkdownV2' },
-  );
+  let consecutiveSkips = 0;
 
-  // Buffer photos that arrive during template step. Once we start photo
-  // collection (after createVisit), new photos forward straight to it.
-  const albumPhotoFileIds: string[] = [];
-  let templateText: string | null = null;
+  for (let i = 0; i < PROMPTS.length; i++) {
+    const p = PROMPTS[i];
 
-  while (true) {
-    const msg = await conversation.wait();
-
-    // Handle "View full last visit" / "View visit" inline.
-    if (msg.callbackQuery) {
-      const data = msg.callbackQuery.data ?? '';
-      if (data.startsWith('viewlast:') || data.startsWith('viewvisit:')) {
-        const visitId = data.replace(/^view(last|visit):/, '');
-        await msg.answerCallbackQuery();
-        await sendVisitDetails(msg, visitId);
-      } else {
-        await msg.answerCallbackQuery().catch(() => {});
-      }
+    // Resume: skip already-filled prompts
+    if (answers[p.key]) {
       continue;
     }
 
-    if (msg.message?.text === '/cancel') {
-      await ctx.reply('No worries — visit cancelled.');
-      return;
-    }
+    await conversation.external(() => setActiveSection(telegramId, sectionKeyForPrompt(p.key)));
 
-    const text = msg.message?.caption ?? msg.message?.text ?? null;
-    if (!text) {
-      if (msg.message?.photo) {
-        const p = msg.message.photo;
-        if (albumPhotoFileIds.length < 6) {
-          albumPhotoFileIds.push(p[p.length - 1].file_id);
-        }
+    const showSkipRest = consecutiveSkips >= 2 && i < PROMPTS.length - 1;
+    await ctx.reply(formatPrompt(i, PROMPTS.length, p), {
+      parse_mode: 'Markdown',
+      reply_markup: buildPromptKeyboard(createdVisitId, p, showSkipRest),
+    });
+
+    let resolved: 'text' | 'skip' | 'skiprest' | 'cancel' = 'text';
+    let textValue: string | null = null;
+
+    promptWait: while (true) {
+      const upd = await conversation.wait();
+
+      if (upd.message?.text === '/cancel') {
+        resolved = 'cancel';
+        break;
+      }
+      if (upd.message?.photo) {
+        const arr = upd.message.photo;
+        const fileId = arr[arr.length - 1].file_id;
+        await conversation.external(() => handleIncomingPhoto(telegramId, fileId));
         continue;
       }
-      await ctx.reply("Send the filled template as a text message. /cancel to stop.");
-      continue;
-    }
-
-    if (msg.message?.photo) {
-      const p = msg.message.photo;
-      if (albumPhotoFileIds.length < 6) {
-        albumPhotoFileIds.push(p[p.length - 1].file_id);
+      if (upd.callbackQuery) {
+        const data = upd.callbackQuery.data ?? '';
+        if (data === `prompt:skip:${p.key}`) {
+          await upd.answerCallbackQuery('Skipped');
+          resolved = 'skip';
+          break promptWait;
+        }
+        if (data === 'prompt:skiprest') {
+          await upd.answerCallbackQuery('Skipped the rest');
+          resolved = 'skiprest';
+          break promptWait;
+        }
+        // Other callbacks (e.g. Log Training URL button has no callback;
+        // viewlast/viewvisit handled at bot.ts level) — ignore politely.
+        await upd.answerCallbackQuery().catch(() => {});
+        continue;
+      }
+      const text = upd.message?.caption ?? upd.message?.text ?? null;
+      if (text) {
+        textValue = text;
+        resolved = 'text';
+        break;
       }
     }
 
-    templateText = text;
-    break;
+    if (resolved === 'cancel') {
+      await conversation.external(() => setActiveSection(telegramId, null));
+      await ctx.reply('No worries — visit saved as draft. Run /visit to resume.');
+      return;
+    }
+    if (resolved === 'skiprest') {
+      consecutiveSkips++;
+      break;
+    }
+    if (resolved === 'skip') {
+      consecutiveSkips++;
+      continue;
+    }
+    // text path
+    answers[p.key] = textValue;
+    consecutiveSkips = 0;
+    await conversation.external(() => persistVisitSection(createdVisitId, p.key, textValue));
   }
 
-  const sections = parseTemplate(templateText);
-  const filled = filledCount(sections);
+  // ── Follow-up close-out ───────────────────────────────────────────────────
+  await conversation.external(() => setActiveSection(telegramId, 'follow_up'));
 
-  // ── Create visit early so photos can upload during the rest of the flow ───
-
-  const visit = await conversation.external(async () => {
-    const v = await createVisit({
-      store_id: storeId,
-      cm_telegram_id: telegramId,
-      grade: null,
-      grade_comments: null,
-    });
-    if (!v) return null;
-    await attachVisitSections(v.id, sections);
-    await setVisitCMs(v.id, telegramId, []);
-    return v;
-  });
-
-  if (!visit) {
-    await ctx.reply("Something went wrong — give /visit another try 🙏");
-    return;
-  }
-
-  // Kick off photo upload in parallel. Stragglers arriving via
-  // bot.on('message:photo') after the conversation exits land here too.
-  await conversation.external(() => {
-    startPhotoCollection(telegramId, visit.id, storeId, storeName, filled, albumPhotoFileIds);
-  });
-
-  // ── Step 2/3: Grade (tap → edit msg to ask for comment) ───────────────────
-
-  const gradeMsg = await ctx.reply(
-    `📊 *Step 2 of 3 — Grade This Store*\n\n` +
-    `1️⃣ Great Store — Hitting All 3 Areas\n` +
-    `   _(Allies / Displays / Sales)_\n\n` +
-    `2️⃣ Good Store — Hitting 2 Areas\n\n` +
-    `3️⃣ Needs Improvement`,
+  await ctx.reply(
+    `✓ *Any follow-ups before we close?*\n` +
+      `_Stock orders, emails, demos to plan, revisits…_\n` +
+      `Type one line (quick) OR tap *Add in Mini-App* for multiple with due dates.`,
     {
       parse_mode: 'Markdown',
-      reply_markup: new InlineKeyboard()
-        .text('1', 'grade:1')
-        .text('2', 'grade:2')
-        .text('3', 'grade:3'),
+      reply_markup: buildFollowUpKeyboard(createdVisitId),
     },
   );
 
-  let grade: 1 | 2 | 3 | null = null;
-  while (grade === null) {
+  let followUpsAdded = 0;
+  let typedFollowUp: string | null = null;
+
+  followUpLoop: while (true) {
     const upd = await conversation.wait();
 
     if (upd.message?.text === '/cancel') {
-      await ctx.reply('No worries — visit cancelled.');
+      await conversation.external(() => setActiveSection(telegramId, null));
+      await ctx.reply('No worries — visit saved as draft. Run /visit to resume.');
       return;
     }
-
     if (upd.message?.photo) {
-      const p = upd.message.photo;
-      const fileId = p[p.length - 1].file_id;
+      const arr = upd.message.photo;
+      const fileId = arr[arr.length - 1].file_id;
       await conversation.external(() => handleIncomingPhoto(telegramId, fileId));
       continue;
     }
-
     if (upd.callbackQuery) {
       const data = upd.callbackQuery.data ?? '';
-      const m = data.match(/^grade:([1-3])$/);
-      if (m) {
-        grade = Number(m[1]) as 1 | 2 | 3;
-        await upd.answerCallbackQuery(`Grade ${grade} ✓`);
-      } else {
-        await upd.answerCallbackQuery().catch(() => {});
-      }
-      continue;
-    }
-
-    if (upd.message?.text) {
-      await ctx.reply('Tap a grade button: 1, 2, or 3. /cancel to stop.');
-    }
-  }
-
-  // Render the comment-stage message. Two modes:
-  //   'idle'     → [Skip] [Change]              (default after grading)
-  //   'changing' → [Back] [1] [2] [3]           (only after tapping Change)
-  // Typing a comment always commits and ends, regardless of mode.
-  async function renderGradeCommentPrompt(g: 1 | 2 | 3, mode: 'idle' | 'changing' = 'idle') {
-    const text = mode === 'idle'
-      ? `📊 *Grade ${g}* — Add a Comment?\n\nType a comment, or tap Skip. Tap Change to update the grade.`
-      : `📊 *Grade ${g}* — Change Grade\n\nTap a new grade, or Back to keep Grade ${g}.`;
-    const keyboard = mode === 'idle'
-      ? new InlineKeyboard()
-          .text('Skip', 'grade:skip-comments')
-          .text('Change', 'grade:change')
-      : new InlineKeyboard()
-          .text('Back', 'grade:change-back')
-          .text('1', 'grade:1').text('2', 'grade:2').text('3', 'grade:3');
-    await ctx.api.editMessageText(
-      gradeMsg.chat.id,
-      gradeMsg.message_id,
-      text,
-      { parse_mode: 'Markdown', reply_markup: keyboard },
-    ).catch(() => {});
-  }
-  let commentMode: 'idle' | 'changing' = 'idle';
-  await renderGradeCommentPrompt(grade, commentMode);
-
-  let gradeComments: string | null = null;
-  let commentsDone = false;
-  while (!commentsDone) {
-    const upd = await conversation.wait();
-
-    if (upd.message?.text === '/cancel') {
-      await ctx.reply('No worries — visit cancelled.');
-      return;
-    }
-
-    if (upd.message?.photo) {
-      const p = upd.message.photo;
-      const fileId = p[p.length - 1].file_id;
-      await conversation.external(() => handleIncomingPhoto(telegramId, fileId));
-      continue;
-    }
-
-    if (upd.callbackQuery) {
-      const data = upd.callbackQuery.data ?? '';
-      if (data === 'grade:skip-comments') {
+      if (data === 'followup:skip') {
         await upd.answerCallbackQuery('Skipped');
-        commentsDone = true;
-        break;
+        break followUpLoop;
       }
-      if (data === 'grade:change') {
-        commentMode = 'changing';
-        await upd.answerCallbackQuery().catch(() => {});
-        await renderGradeCommentPrompt(grade, commentMode);
-        continue;
-      }
-      if (data === 'grade:change-back') {
-        commentMode = 'idle';
-        await upd.answerCallbackQuery().catch(() => {});
-        await renderGradeCommentPrompt(grade, commentMode);
-        continue;
-      }
-      const m = data.match(/^grade:([1-3])$/);
-      if (m) {
-        const newGrade = Number(m[1]) as 1 | 2 | 3;
-        const changed = newGrade !== grade;
-        grade = newGrade;
-        commentMode = 'idle';
-        await upd.answerCallbackQuery(changed ? `Grade ${grade} ✓` : `Grade ${grade}`).catch(() => {});
-        await renderGradeCommentPrompt(grade, commentMode);
-        continue;
+      if (data === 'followup:done') {
+        // If the mini-app was used it has already inserted rows; pick up count.
+        const items = await conversation.external(() =>
+          listFollowUpsForVisit(createdVisitId),
+        );
+        followUpsAdded = items.length;
+        await upd.answerCallbackQuery(
+          followUpsAdded ? `${followUpsAdded} saved` : 'Done',
+        );
+        break followUpLoop;
       }
       await upd.answerCallbackQuery().catch(() => {});
       continue;
     }
-
-    const text = upd.message?.text ?? upd.message?.caption ?? null;
+    const text = upd.message?.caption ?? upd.message?.text ?? null;
     if (text) {
-      gradeComments = text;
-      commentsDone = true;
-      break;
-    }
-  }
-
-  // ── Step 3/3: Training (Yes → mini-app prompt, Skip → straight to Done) ──
-
-  await ctx.reply(
-    `🎓 *Step 3 of 3 — Train Anyone Today?*\n\n` +
-    `If yes, you'll log staff + product details in the mini-app — faster with the staff list and brand chips there.`,
-    {
-      parse_mode: 'Markdown',
-      reply_markup: new InlineKeyboard().text('Skip', 'training:no').text('Yes', 'training:yes'),
-    },
-  );
-
-  let trainingChoice: 'yes' | 'no' | null = null;
-  while (trainingChoice === null) {
-    const upd = await conversation.wait();
-
-    if (upd.message?.text === '/cancel') {
-      await ctx.reply('No worries — visit cancelled.');
-      return;
-    }
-    if (upd.message?.photo) {
-      const p = upd.message.photo;
-      const fileId = p[p.length - 1].file_id;
-      await conversation.external(() => handleIncomingPhoto(telegramId, fileId));
+      typedFollowUp = text;
+      const saved = await conversation.external(async () => {
+        const row = await createFollowUp({
+          visit_id: createdVisitId,
+          store_id: storeId,
+          cm_telegram_id: telegramId,
+          title: text,
+        });
+        if (row) await setVisitFollowUpText(createdVisitId, text);
+        return row !== null;
+      });
+      if (saved) {
+        followUpsAdded = 1;
+        await ctx.reply(
+          `✓ Got it — added "${text.slice(0, 60)}${text.length > 60 ? '…' : ''}"`,
+          {
+            reply_markup: new InlineKeyboard()
+              .text('Skip', 'followup:skip')
+              .text('✅ Done', 'followup:done'),
+          },
+        );
+      } else {
+        await ctx.reply("Couldn't save that follow-up — try once more 🙏");
+      }
       continue;
     }
-    if (upd.callbackQuery) {
-      const data = upd.callbackQuery.data ?? '';
-      if (data === 'training:yes') { trainingChoice = 'yes'; await upd.answerCallbackQuery(); }
-      else if (data === 'training:no') { trainingChoice = 'no'; await upd.answerCallbackQuery('Skipped'); }
-      else await upd.answerCallbackQuery().catch(() => {});
-    }
   }
 
-  // ── If user picked Yes, surface the training prompt BEFORE Done ──────────
-  //
-  // The prompt has two callback buttons (both finalize the visit) plus a URL
-  // button that opens the mini-app. Whichever the user taps, we fall through
-  // and finalize. The URL button doesn't fire a callback, so users who tap it
-  // need to come back and tap one of the callback options to close out the
-  // flow — the wording makes that clear.
+  await conversation.external(() => setActiveSection(telegramId, null));
 
-  if (trainingChoice === 'yes' && config.broadcast.botUsername) {
-    const deepLink =
-      `https://t.me/${config.broadcast.botUsername}/${config.miniapp.shortName}` +
-      `?startapp=visit_${visit.id}_training`;
-    await ctx.reply(
-      `🎓 *Log Training Details*\n\nTap *Open in Mini-App* to add them now, or *Add Later* if you'd rather do it from the visit page after.`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: new InlineKeyboard()
-          .url('📝 Open in Mini-App', deepLink).row()
-          .text('Add Later', 'training:close').text("I've Added It", 'training:close'),
-      },
-    );
-
-    let trainingDone = false;
-    while (!trainingDone) {
-      const upd = await conversation.wait();
-      if (upd.message?.text === '/cancel') {
-        await ctx.reply('No worries — visit cancelled.');
-        return;
-      }
-      if (upd.message?.photo) {
-        const p = upd.message.photo;
-        const fileId = p[p.length - 1].file_id;
-        await conversation.external(() => handleIncomingPhoto(telegramId, fileId));
-        continue;
-      }
-      if (upd.callbackQuery?.data === 'training:close') {
-        await upd.answerCallbackQuery();
-        trainingDone = true;
-        break;
-      }
-      if (upd.callbackQuery) await upd.answerCallbackQuery().catch(() => {});
-    }
-  }
-
-  // ── Finalize: grade, lock, then wait for photo uploads ────────────────────
-
+  // ── Finalize: lock, broadcast, drain photo queue, send Done message ──────
   const savedPhotos = await conversation.external(async () => {
-    if (grade !== null) await setVisitGrade(visit.id, grade, gradeComments);
-    await lockVisit(visit.id);
+    await lockVisit(createdVisitId);
     if (plan) await consumePlan(plan.id);
-    await broadcastVisitLocked(visit.id, ctx.api).catch(() => {});
-    // Wait for photo debounce + uploads so the Done message can include the
-    // final saved count instead of leaving the user with a "loading" feel.
-    return await awaitPhotoUpload(visit.id);
+    await broadcastVisitLocked(createdVisitId, ctx.api).catch(() => {});
+    return await awaitPhotoUpload(createdVisitId);
   });
 
-  // ── Unified Done message ──────────────────────────────────────────────────
-
   const photoLine = savedPhotos > 0
-    ? `\n📸 ${savedPhotos} ${savedPhotos === 1 ? 'Photo' : 'Photos'} Saved`
+    ? `\n📸 ${savedPhotos} ${savedPhotos === 1 ? 'photo' : 'photos'} saved`
+    : '';
+  const followUpLine = followUpsAdded > 0
+    ? `\n✅ ${followUpsAdded} follow-up${followUpsAdded === 1 ? '' : 's'}`
     : '';
 
   await ctx.reply(
-    `🎉 *${storeName}* Logged ✓\n` +
-    `Grade ${grade}` +
-    photoLine,
+    `🎉 *${storeName}* logged ✓` + photoLine + followUpLine,
     {
       parse_mode: 'Markdown',
-      reply_markup: buildDoneKeyboard(visit.id),
+      reply_markup: buildDoneKeyboard(createdVisitId),
     },
   );
 }
+
+// Re-export for callers that need to inspect prompt keys.
+export { PROMPTS as V2_PROMPTS, V2_PROMPT_COLUMN };
+export const V2_PROMPT_KEYS = PROMPTS.map((p) => p.key);
+// Type guard for tests / external dispatch (kept thin).
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _typeAnchor(): SectionKey { return 'follow_up'; }

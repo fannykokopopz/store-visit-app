@@ -29,10 +29,13 @@ export async function handleHelp(ctx: BotContext): Promise<void> {
     `🚫 /cancel — stop what you're doing\n` +
     managerBlock +
     adminBlock + `\n` +
-    `📝 *How the visit template works*\n\n` +
-    `You'll get 5 sections to fill in:\n` +
-    `🌟 Good News · 🔍 Competitors · 📦 Display & Stock\n` +
-    `✅ Follow Up · ⚡ Buzz Plan\n\n` +
+    `📝 *How /visit works*\n\n` +
+    `Pick the store, then answer 4 quick prompts:\n` +
+    `🎉 Good News · 👥 People & Training\n` +
+    `🔍 Competitor Insights · 📦 Display & Stock\n\n` +
+    `Each prompt has a *Skip* button if there's nothing to flag.\n` +
+    `Send photos any time — they tag to whichever prompt is active.\n` +
+    `Close out with one-line or mini-app follow-ups.\n\n` +
     `💡 _Names, numbers, and specifics make your notes 10× more useful._`,
     { parse_mode: 'Markdown' },
   );

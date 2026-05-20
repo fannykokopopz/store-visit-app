@@ -20,7 +20,7 @@ import { visitFlow } from './conversations/visit-flow.js';
 import { joinRequestFlow } from './conversations/join-request.js';
 import { initPhotoCollection, isCollecting, handleIncomingPhoto } from './photo-collection.js';
 import { startEditSession, isEditing, getEditSession, clearEditSession } from './edit-session.js';
-import { getVisitInfo, updateVisitSections, updateVisitGrade, updateVisitGradeComments, deleteVisit } from '../db/queries/visits.js';
+import { getVisitInfo, updateVisitSections, updateVisitGrade, updateVisitGradeComments, deleteVisit, getDraftVisit } from '../db/queries/visits.js';
 import { approvePendingCM, rejectPendingCM, getCMRecord, type CM } from '../db/queries/cms.js';
 import { parseTemplate, filledCount } from '../utils/parse-template.js';
 import { sendVisitDetails } from './visit-details.js';
@@ -47,17 +47,43 @@ export function createBot(): Bot<BotContext> {
 
   bot.command('dashboard', handleDashboard);
 
-  bot.command('visit', async (ctx) => {
+  async function startVisitFlow(ctx: BotContext): Promise<void> {
     const user = requireAuth(ctx);
-    if (!user) return;
+    if (!user || !ctx.from) return;
+    const draft = await getDraftVisit(ctx.from.id);
+    if (draft) {
+      await ctx.reply(
+        `You have an open visit at *${draft.store_name}*.\nResume or start fresh?`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: new InlineKeyboard()
+            .text('▶️ Resume', `visit:resume:${draft.id}`)
+            .text('🆕 Start fresh', `visit:discard:${draft.id}`),
+        },
+      );
+      return;
+    }
     await ctx.conversation.enter('visitFlow');
-  });
+  }
+
+  bot.command('visit', startVisitFlow);
 
   // Quick-access reply keyboard buttons (shown after /start)
   // 🏪 = "after the store" (log visit) · 🔗 = "in store" (currently links, future checklists)
-  bot.hears('🏪 Log Visit', async (ctx) => {
-    const user = requireAuth(ctx);
-    if (!user) return;
+  bot.hears('🏪 Log Visit', startVisitFlow);
+
+  bot.callbackQuery(/^visit:resume:/, async (ctx) => {
+    const visitId = ctx.callbackQuery.data.replace('visit:resume:', '');
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+    await ctx.conversation.enter('visitFlow', visitId);
+  });
+
+  bot.callbackQuery(/^visit:discard:/, async (ctx) => {
+    const visitId = ctx.callbackQuery.data.replace('visit:discard:', '');
+    await deleteVisit(visitId);
+    await ctx.answerCallbackQuery('Started fresh');
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
     await ctx.conversation.enter('visitFlow');
   });
   bot.hears('🔗 Links', handleLinks);

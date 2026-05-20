@@ -12,6 +12,7 @@ export interface Visit {
   follow_up: string | null;
   buzz_plan: string | null;
   training: string | null;
+  people_training: string | null;
   grade: 1 | 2 | 3 | null;
   grade_comments: string | null;
   is_locked: boolean;
@@ -20,6 +21,18 @@ export interface Visit {
   edited_at: string | null;
   created_at: string;
 }
+
+// Maps the v2 prompt key to the visits column the conversation persists into.
+// Kept here (not in the conversation file) so other code paths — resume,
+// visit-details — can use the same mapping.
+export const V2_PROMPT_COLUMN = {
+  good_news:       'good_news',
+  people_training: 'people_training',
+  competitor:      'competitors',
+  display_stock:   'display_stock',
+} as const;
+
+export type V2PromptKey = keyof typeof V2_PROMPT_COLUMN;
 
 export async function createVisit(data: {
   store_id: string;
@@ -269,6 +282,63 @@ export async function updateVisitSections(
 
   if (error) {
     console.error('updateVisitSections error:', error);
+    return false;
+  }
+  return true;
+}
+
+// Returns the most recent unlocked visit by this CM within the resume window.
+// Used by /visit to offer Resume / Start-fresh when a draft is open.
+export async function getDraftVisit(
+  cmTelegramId: number,
+  windowHours = 6,
+): Promise<(Visit & { store_name: string }) | null> {
+  const since = new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('visits')
+    .select('*, stores(name)')
+    .eq('cm_telegram_id', cmTelegramId)
+    .eq('is_locked', false)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  const v = data as any;
+  return { ...v, store_name: v.stores?.name ?? 'Unknown store' };
+}
+
+// Save-as-you-go: write one prompt's freetext (or null for Skip) to its
+// column. Called by the v2 flow after each prompt reply.
+export async function persistVisitSection(
+  visitId: string,
+  key: V2PromptKey,
+  value: string | null,
+): Promise<boolean> {
+  const column = V2_PROMPT_COLUMN[key];
+  const { error } = await supabase
+    .from('visits')
+    .update({ [column]: value })
+    .eq('id', visitId);
+  if (error) {
+    console.error('persistVisitSection error:', error);
+    return false;
+  }
+  return true;
+}
+
+// Used by the v2 follow-up close-out fallback path: typed freetext is also
+// mirrored to the legacy follow_up column for back-compat with old renderers.
+export async function setVisitFollowUpText(
+  visitId: string,
+  text: string | null,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('visits')
+    .update({ follow_up: text })
+    .eq('id', visitId);
+  if (error) {
+    console.error('setVisitFollowUpText error:', error);
     return false;
   }
   return true;
