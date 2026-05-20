@@ -60,6 +60,27 @@ export interface VisitTrainedStaff {
   products: string | null;
 }
 
+export interface VisitFollowUpRow {
+  id: string;
+  title: string;
+  notes: string | null;
+  due_date: string | null;
+  status: 'open' | 'done' | 'cancelled';
+  closed_at: string | null;
+  created_at: string;
+}
+
+export interface VisitPhotoRow {
+  storage_path: string;
+  section_key:
+    | 'good_news'
+    | 'people_training'
+    | 'competitor'
+    | 'display_stock'
+    | 'follow_up'
+    | null;
+}
+
 export interface FullVisit extends VisitSummary {
   store_id: string;
   store_name: string;
@@ -67,7 +88,12 @@ export interface FullVisit extends VisitSummary {
   is_locked: boolean;
   submitted_at: string | null;
   edited_at: string | null;
+  people_training: string | null;
+  // Photos with section_key so the visit page can render grouped + ungrouped.
+  // photo_paths kept for back-compat with /api/m/visit/[id] PATCH editor.
+  photos: VisitPhotoRow[];
   photo_paths: string[];
+  follow_ups: VisitFollowUpRow[];
   grade: 1 | 2 | 3 | null;
   grade_comments: string | null;
   cms: { telegram_id: number; name: string; role: 'lead' | 'co' }[];
@@ -501,14 +527,36 @@ export async function getFullVisitForCM(
 
   const { data: photos } = await supabase
     .from("visit_photos")
-    .select("storage_path")
+    .select("storage_path, section_key")
     .eq("visit_id", visitId)
     .order("created_at");
 
-  const photoPaths = (photos ?? [])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((p: any) => p.storage_path as string)
-    .filter(Boolean);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const photoRows: VisitPhotoRow[] = ((photos ?? []) as any[])
+    .map((p) => ({
+      storage_path: p.storage_path as string,
+      section_key: (p.section_key as VisitPhotoRow["section_key"]) ?? null,
+    }))
+    .filter((p) => Boolean(p.storage_path));
+
+  const photoPaths = photoRows.map((p) => p.storage_path);
+
+  const { data: followUpRows } = await supabase
+    .from("visit_follow_ups")
+    .select("id, title, notes, due_date, status, closed_at, created_at")
+    .eq("visit_id", visitId)
+    .order("created_at", { ascending: true });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const followUps: VisitFollowUpRow[] = ((followUpRows ?? []) as any[]).map((r) => ({
+    id: r.id as string,
+    title: r.title as string,
+    notes: (r.notes as string | null) ?? null,
+    due_date: (r.due_date as string | null) ?? null,
+    status: r.status as 'open' | 'done' | 'cancelled',
+    closed_at: (r.closed_at as string | null) ?? null,
+    created_at: r.created_at as string,
+  }));
 
   const viewerIsLead = cms.find((c) => c.role === 'lead')?.telegram_id === telegramId;
 
@@ -535,21 +583,99 @@ export async function getFullVisitForCM(
     display_stock: v.display_stock,
     follow_up: v.follow_up,
     buzz_plan: v.buzz_plan,
+    people_training: v.people_training ?? null,
     store_id: v.store_id,
     store_name: v.stores?.name ?? "Unknown store",
     cm_telegram_id: v.cm_telegram_id,
     is_locked: v.is_locked,
     submitted_at: v.submitted_at,
     edited_at: v.edited_at,
-    photo_count: photoPaths.length,
+    photo_count: photoRows.length,
     thumb_urls: [],
+    photos: photoRows,
     photo_paths: photoPaths,
+    follow_ups: followUps,
     grade: v.grade ?? null,
     grade_comments: v.grade_comments ?? null,
     cms,
     trained_staff: trainedStaff,
     viewer_is_lead: viewerIsLead,
   };
+}
+
+// ─── Visit follow-ups (mini-app side) ──────────────────────────────────────
+
+export async function createFollowUpsForVisit(
+  visitId: string,
+  cmTelegramId: number,
+  items: Array<{ title: string; notes?: string | null; due_date?: string | null }>,
+): Promise<VisitFollowUpRow[]> {
+  // Look up store_id from the visit so the API caller doesn't have to pass it.
+  const { data: visit } = await supabase
+    .from("visits")
+    .select("store_id")
+    .eq("id", visitId)
+    .single();
+  if (!visit) return [];
+
+  const rows = items
+    .filter((i) => i.title.trim())
+    .map((i) => ({
+      visit_id: visitId,
+      store_id: (visit as { store_id: string }).store_id,
+      cm_telegram_id: cmTelegramId,
+      title: i.title.trim(),
+      notes: i.notes && i.notes.trim() ? i.notes.trim() : null,
+      due_date: i.due_date && i.due_date.trim() ? i.due_date : null,
+    }));
+  if (rows.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("visit_follow_ups")
+    .insert(rows)
+    .select("id, title, notes, due_date, status, closed_at, created_at");
+  if (error || !data) {
+    console.error("createFollowUpsForVisit error:", error);
+    return [];
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data as any[]).map((r) => ({
+    id: r.id,
+    title: r.title,
+    notes: r.notes ?? null,
+    due_date: r.due_date ?? null,
+    status: r.status,
+    closed_at: r.closed_at ?? null,
+    created_at: r.created_at,
+  }));
+}
+
+export async function listFollowUpsForVisitMA(
+  visitId: string,
+): Promise<VisitFollowUpRow[]> {
+  const { data } = await supabase
+    .from("visit_follow_ups")
+    .select("id, title, notes, due_date, status, closed_at, created_at")
+    .eq("visit_id", visitId)
+    .order("created_at", { ascending: true });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((data ?? []) as any[]).map((r) => ({
+    id: r.id,
+    title: r.title,
+    notes: r.notes ?? null,
+    due_date: r.due_date ?? null,
+    status: r.status,
+    closed_at: r.closed_at ?? null,
+    created_at: r.created_at,
+  }));
+}
+
+export async function markFollowUpDoneMA(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from("visit_follow_ups")
+    .update({ status: "done", closed_at: new Date().toISOString() })
+    .eq("id", id);
+  return !error;
 }
 
 export async function updateVisitStaffProducts(
@@ -653,7 +779,7 @@ export async function getStoreIdForVisit(visitId: string): Promise<string | null
 export async function updateVisitText(
   telegramId: number,
   visitId: string,
-  fields: Partial<Pick<FullVisit, "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan">>,
+  fields: Partial<Pick<FullVisit, "good_news" | "people_training" | "competitors" | "display_stock" | "follow_up" | "buzz_plan">>,
 ): Promise<boolean> {
   const { error } = await supabase
     .from("visits")

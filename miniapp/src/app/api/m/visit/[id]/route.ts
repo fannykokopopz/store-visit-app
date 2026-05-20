@@ -1,7 +1,14 @@
 import { authedCMFromRequest } from "@/lib/miniapp-auth";
 import { getFullVisitForCM, signPhotoUrls, updateVisitText } from "@/lib/queries";
 
-const TEXT_FIELDS = ["good_news", "competitors", "display_stock", "follow_up", "buzz_plan"] as const;
+const TEXT_FIELDS = [
+  "good_news",
+  "people_training",
+  "competitors",
+  "display_stock",
+  "follow_up",
+  "buzz_plan",
+] as const;
 
 export async function GET(
   req: Request,
@@ -16,10 +23,23 @@ export async function GET(
   if (!visit) {
     return Response.json({ error: "Visit not found" }, { status: 404 });
   }
-  const photoUrls = await signPhotoUrls(visit.photo_paths);
+  // Photos: signed URLs in same order as visit.photos so the client can group
+  // by section_key without re-mapping paths.
+  const signedUrls = await signPhotoUrls(visit.photo_paths);
+  const photosWithUrls = visit.photos.map((p, i) => ({
+    storage_path: p.storage_path,
+    section_key: p.section_key,
+    url: signedUrls[i] ?? null,
+  }));
   const canEditCoCMs = visit.viewer_is_lead || cm.role !== "cm";
   const canEditTraining = visit.viewer_is_lead || cm.role !== "cm";
-  return Response.json({ visit, photoUrls, canEditCoCMs, canEditTraining });
+  return Response.json({
+    visit,
+    photoUrls: signedUrls, // back-compat for /edit page
+    photos: photosWithUrls,
+    canEditCoCMs,
+    canEditTraining,
+  });
 }
 
 export async function PATCH(

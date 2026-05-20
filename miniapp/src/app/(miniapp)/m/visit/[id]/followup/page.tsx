@@ -1,0 +1,230 @@
+"use client";
+
+import { use, useEffect, useState } from "react";
+import Link from "next/link";
+import { initTelegram } from "../../../telegram-init";
+import { useSwipeBack } from "@/lib/useSwipeBack";
+
+interface DraftItem {
+  id: number; // local-only key for React lists
+  title: string;
+  notes: string;
+  due_date: string; // YYYY-MM-DD or ""
+}
+
+function newDraft(id: number): DraftItem {
+  return { id, title: "", notes: "", due_date: "" };
+}
+
+interface VisitMeta {
+  id: string;
+  store_id: string;
+  store_name: string;
+}
+
+export default function FollowUpFormPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
+  const [meta, setMeta] = useState<VisitMeta | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [initData, setInitData] = useState<string | null>(null);
+  const [items, setItems] = useState<DraftItem[]>([newDraft(0)]);
+  const [nextId, setNextId] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [savedCount, setSavedCount] = useState<number | null>(null);
+  useSwipeBack();
+
+  useEffect(() => {
+    (async () => {
+      const td = await initTelegram();
+      if (!td) { setError("Open this from inside Telegram."); return; }
+      setInitData(td);
+      const res = await fetch(`/api/m/visit/${id}`, {
+        headers: { Authorization: `tma ${td}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? `Failed (${res.status})`);
+        return;
+      }
+      const data = await res.json();
+      setMeta({
+        id: data.visit.id,
+        store_id: data.visit.store_id,
+        store_name: data.visit.store_name,
+      });
+    })().catch((e) => setError(String(e)));
+  }, [id]);
+
+  function updateItem(i: number, patch: Partial<DraftItem>) {
+    setItems((curr) => curr.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  }
+
+  function removeItem(i: number) {
+    setItems((curr) => (curr.length === 1 ? curr : curr.filter((_, idx) => idx !== i)));
+  }
+
+  function addAnother() {
+    setItems((curr) => [...curr, newDraft(nextId)]);
+    setNextId((n) => n + 1);
+  }
+
+  async function saveAll() {
+    if (!initData) return;
+    const payload = items
+      .map((it) => ({
+        title: it.title.trim(),
+        notes: it.notes.trim() || null,
+        due_date: it.due_date.trim() || null,
+      }))
+      .filter((it) => it.title);
+    if (payload.length === 0) {
+      setError("Add at least one follow-up title.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/m/visit/${id}/followup`, {
+        method: "POST",
+        headers: {
+          Authorization: `tma ${initData}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ items: payload }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? `Failed (${res.status})`);
+        return;
+      }
+      const body = await res.json().catch(() => ({}));
+      const count = Array.isArray(body.items) ? body.items.length : payload.length;
+      setSavedCount(count);
+      // Telegram WebApp close — returns user to the bot chat. Falls back to
+      // navigating to the visit page in browsers (e.g. dev preview).
+      const tg = (window as Window & {
+        Telegram?: { WebApp?: { close?: () => void } };
+      }).Telegram?.WebApp;
+      if (tg?.close) {
+        setTimeout(() => tg.close?.(), 600);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (error && !meta) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-6">
+        <p className="text-center text-sm text-ink-400">{error}</p>
+      </main>
+    );
+  }
+  if (!meta) {
+    return (
+      <main className="flex min-h-screen items-center justify-center p-6">
+        <p className="text-center text-sm text-ink-300">Loading…</p>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen pb-12">
+      <header className="bg-white border-b border-ink-100 px-4 pt-4 pb-4">
+        <Link
+          href={`/m/visit/${meta.id}`}
+          className="text-xs text-ink-300 font-medium flex items-center gap-1 mb-3"
+        >
+          ‹ Back to visit
+        </Link>
+        <h1 className="text-xl font-extrabold text-ink-700 leading-tight">
+          Add Follow-ups
+        </h1>
+        <p className="mt-1 text-[12px] text-ink-400">{meta.store_name}</p>
+      </header>
+
+      <div className="space-y-3 px-3.5 mt-4">
+        {items.map((it, i) => (
+          <div key={it.id} className="rounded-[18px] border border-ink-100 bg-white p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-ink-400">
+                Item {i + 1}
+              </span>
+              {items.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeItem(i)}
+                  className="text-[11px] font-bold text-ink-300"
+                >
+                  × Remove
+                </button>
+              )}
+            </div>
+            <input
+              type="text"
+              value={it.title}
+              onChange={(e) => updateItem(i, { title: e.target.value })}
+              placeholder="Title — what needs doing"
+              className="w-full rounded-lg border border-ink-100 bg-white px-3 py-2 text-[13px] text-ink-700 placeholder:text-ink-300 focus:border-[var(--color-tc-200)] focus:outline-none"
+            />
+            <textarea
+              value={it.notes}
+              onChange={(e) => updateItem(i, { notes: e.target.value })}
+              placeholder="Notes (optional)"
+              rows={2}
+              className="mt-2 w-full resize-none rounded-lg border border-ink-100 bg-white px-3 py-2 text-[13px] text-ink-700 placeholder:text-ink-300 focus:border-[var(--color-tc-200)] focus:outline-none"
+            />
+            <div className="mt-2 flex items-center gap-2">
+              <label className="text-[11px] font-semibold text-ink-400">Due:</label>
+              <input
+                type="date"
+                value={it.due_date}
+                onChange={(e) => updateItem(i, { due_date: e.target.value })}
+                className="flex-1 rounded-lg border border-ink-100 bg-white px-2 py-1.5 text-[12px] text-ink-700 focus:border-[var(--color-tc-200)] focus:outline-none"
+              />
+            </div>
+          </div>
+        ))}
+
+        <button
+          type="button"
+          onClick={addAnother}
+          className="w-full rounded-xl border border-dashed border-ink-200 px-3 py-2.5 text-[12px] font-bold text-ink-500"
+        >
+          + Add another
+        </button>
+
+        {error && (
+          <p className="text-center text-[12px] text-rose-600">{error}</p>
+        )}
+        {savedCount !== null && (
+          <p className="text-center text-[12px] text-emerald-600 font-semibold">
+            ✓ Saved {savedCount} follow-up{savedCount === 1 ? "" : "s"}. Returning to bot…
+          </p>
+        )}
+
+        <div className="flex gap-2 mt-3">
+          <Link
+            href={`/m/visit/${meta.id}`}
+            className="flex-1 rounded-xl py-3 text-center text-sm font-bold bg-ink-100 text-ink-500"
+          >
+            Cancel
+          </Link>
+          <button
+            type="button"
+            onClick={saveAll}
+            disabled={saving || savedCount !== null}
+            className="flex-1 rounded-xl py-3 text-sm font-bold text-white disabled:opacity-50"
+            style={{ background: "var(--color-tc-600)" }}
+          >
+            {saving ? "Saving…" : savedCount !== null ? "Saved" : "Save All"}
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}

@@ -18,12 +18,34 @@ interface TrainedStaff {
   products: string | null;
 }
 
+interface FollowUpRow {
+  id: string;
+  title: string;
+  notes: string | null;
+  due_date: string | null;
+  status: 'open' | 'done' | 'cancelled';
+  closed_at: string | null;
+}
+
+interface PhotoWithSection {
+  storage_path: string;
+  section_key:
+    | 'good_news'
+    | 'people_training'
+    | 'competitor'
+    | 'display_stock'
+    | 'follow_up'
+    | null;
+  url: string | null;
+}
+
 interface FullVisit {
   id: string;
   store_id: string;
   store_name: string;
   visit_date: string;
   good_news: string | null;
+  people_training: string | null;
   competitors: string | null;
   display_stock: string | null;
   follow_up: string | null;
@@ -36,6 +58,7 @@ interface FullVisit {
   cms: VisitCM[];
   trained_staff: TrainedStaff[];
   viewer_is_lead: boolean;
+  follow_ups: FollowUpRow[];
 }
 
 const GRADE_STYLES: Record<1 | 2 | 3, { label: string; pill: string }> = {
@@ -46,17 +69,30 @@ const GRADE_STYLES: Record<1 | 2 | 3, { label: string; pill: string }> = {
 
 interface VisitPayload {
   visit: FullVisit;
-  photoUrls: string[];
+  photoUrls: string[]; // back-compat (full list, in DB order)
+  photos: PhotoWithSection[];
   canEditCoCMs: boolean;
   canEditTraining: boolean;
 }
 
 interface MarketCM { telegram_id: number; name: string }
 
-type SectionKey = "good_news" | "competitors" | "display_stock" | "follow_up" | "buzz_plan";
+// Visit-v2 section order. follow_up + buzz_plan kept so legacy visits still
+// render anything that lived in those columns (rendered only when populated).
+// The photo `section_key` enum uses 'competitor' (singular); the visits text
+// column uses 'competitors' (plural). photoSection maps from the text-section
+// key to the photo enum value.
+type SectionKey =
+  | "good_news"
+  | "people_training"
+  | "competitors"
+  | "display_stock"
+  | "follow_up"
+  | "buzz_plan";
 
 const SECTIONS: Array<{
   key: SectionKey;
+  photoSection: PhotoWithSection["section_key"];
   label: string;
   icon: string;
   iconBgClass: string;
@@ -64,20 +100,31 @@ const SECTIONS: Array<{
 }> = [
   {
     key: "good_news",
+    photoSection: "good_news",
     label: "Good News",
-    icon: "🌟",
+    icon: "🎉",
     iconBgClass: "bg-[var(--color-section-amber-bg)]",
     titleClass: "text-[var(--color-tc-600)]",
   },
   {
+    key: "people_training",
+    photoSection: "people_training",
+    label: "People & Training",
+    icon: "👥",
+    iconBgClass: "bg-[var(--color-section-teal-bg)]",
+    titleClass: "text-[var(--color-section-teal-fg)]",
+  },
+  {
     key: "competitors",
-    label: "Competitors' Insights",
+    photoSection: "competitor",
+    label: "Competitor Insights",
     icon: "🔍",
     iconBgClass: "bg-[var(--color-section-blue-bg)]",
     titleClass: "text-[var(--color-tier-t1-fg)]",
   },
   {
     key: "display_stock",
+    photoSection: "display_stock",
     label: "Display & Stock",
     icon: "📦",
     iconBgClass: "bg-[var(--color-section-green-bg)]",
@@ -85,13 +132,15 @@ const SECTIONS: Array<{
   },
   {
     key: "follow_up",
-    label: "What to Follow Up",
+    photoSection: "follow_up",
+    label: "Follow-up (text)",
     icon: "✅",
     iconBgClass: "bg-[var(--color-section-pink-bg)]",
     titleClass: "text-[#C0185A]",
   },
   {
     key: "buzz_plan",
+    photoSection: null,
     label: "Buzz Plan",
     icon: "⚡",
     iconBgClass: "bg-[var(--color-section-purple-bg)]",
@@ -320,10 +369,45 @@ export default function VisitPage({
   }
 
   const { visit, photoUrls, canEditCoCMs, canEditTraining } = data;
-  const filled = SECTIONS.filter((s) => visit[s.key]);
+  const photosWithSection: PhotoWithSection[] = data.photos ?? [];
   const lead = visit.cms.find((c) => c.role === 'lead');
   const cos = visit.cms.filter((c) => c.role === 'co');
   const trainedStaff = visit.trained_staff ?? [];
+  const followUps = visit.follow_ups ?? [];
+  const openFollowUps = followUps.filter((f) => f.status === 'open');
+
+  // Build a lightbox index map keyed by storage_path so any thumb (inline or
+  // "Other photos") opens the same flat photoUrls array at the right index.
+  const lightboxIndexByPath = new Map<string, number>();
+  photosWithSection.forEach((p, i) => lightboxIndexByPath.set(p.storage_path, i));
+
+  // Group photos by photoSection enum value. Anything not matching a known
+  // section (NULL or legacy values like 'staff') falls into "other".
+  const photosBySection = new Map<string, PhotoWithSection[]>();
+  const otherPhotos: PhotoWithSection[] = [];
+  for (const p of photosWithSection) {
+    const key = p.section_key;
+    if (
+      key === 'good_news' ||
+      key === 'people_training' ||
+      key === 'competitor' ||
+      key === 'display_stock' ||
+      key === 'follow_up'
+    ) {
+      const arr = photosBySection.get(key) ?? [];
+      arr.push(p);
+      photosBySection.set(key, arr);
+    } else {
+      otherPhotos.push(p);
+    }
+  }
+
+  // Render a section card only if it has text OR has tagged photos.
+  const visibleSections = SECTIONS.filter((s) => {
+    if (visit[s.key]) return true;
+    if (s.photoSection && (photosBySection.get(s.photoSection)?.length ?? 0) > 0) return true;
+    return false;
+  });
 
   return (
     <main className="min-h-screen pb-12">
@@ -388,54 +472,144 @@ export default function VisitPage({
         </div>
       </header>
 
-      {/* Photos */}
-      {photoUrls.length > 0 && (
-        <div className="-mx-0 flex gap-2 overflow-x-auto px-4 py-4 scrollbar-hide">
-          {photoUrls.map((url, i) => (
-            <button
-              key={url}
-              type="button"
-              onClick={() => setLightboxIndex(i)}
-              className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-ink-100"
-            >
-              <Image
-                src={url}
-                alt={`Photo ${i + 1}`}
-                fill
-                className="object-cover"
-                sizes="96px"
-                unoptimized
-              />
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Sections */}
-      <div className={`space-y-2 px-3.5 ${photoUrls.length === 0 ? "mt-4" : ""}`}>
-        {filled.length === 0 ? (
+      {/* Sections — each card includes its text + inline photos for that section */}
+      <div className="space-y-2 px-3.5 mt-4">
+        {visibleSections.length === 0 && otherPhotos.length === 0 ? (
           <div className="rounded-2xl border border-ink-100 bg-white p-5 text-center">
             <p className="text-sm text-ink-300">No notes were added for this visit.</p>
           </div>
         ) : (
-          filled.map((s) => (
-            <div
-              key={s.key}
-              className="rounded-[18px] border border-ink-100 bg-white p-4"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm ${s.iconBgClass}`}>
-                  {s.icon}
-                </span>
-                <span className={`text-[10px] font-extrabold uppercase tracking-wider ${s.titleClass}`}>
-                  {s.label}
-                </span>
+          visibleSections.map((s) => {
+            const sectionPhotos = s.photoSection
+              ? (photosBySection.get(s.photoSection) ?? [])
+              : [];
+            return (
+              <div key={s.key} className="rounded-[18px] border border-ink-100 bg-white p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm ${s.iconBgClass}`}>
+                    {s.icon}
+                  </span>
+                  <span className={`text-[10px] font-extrabold uppercase tracking-wider ${s.titleClass}`}>
+                    {s.label}
+                  </span>
+                </div>
+                {visit[s.key] && (
+                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-500">
+                    {visit[s.key] as string}
+                  </p>
+                )}
+                {sectionPhotos.length > 0 && (
+                  <div className="mt-3 flex gap-2 overflow-x-auto -mx-1 px-1 scrollbar-hide">
+                    {sectionPhotos.map((p) => {
+                      const idx = lightboxIndexByPath.get(p.storage_path) ?? 0;
+                      const url = p.url;
+                      if (!url) return null;
+                      return (
+                        <button
+                          key={p.storage_path}
+                          type="button"
+                          onClick={() => setLightboxIndex(idx)}
+                          className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-ink-100"
+                        >
+                          <Image
+                            src={url}
+                            alt={s.label}
+                            fill
+                            className="object-cover"
+                            sizes="80px"
+                            unoptimized
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-500">
-                {visit[s.key] as string}
-              </p>
+            );
+          })
+        )}
+
+        {/* Follow-ups card */}
+        <div className="rounded-[18px] border border-ink-100 bg-white p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-section-pink-bg)] text-sm">
+                ✅
+              </span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-[#C0185A]">
+                {`Follow-ups (${openFollowUps.length} open)`}
+              </span>
             </div>
-          ))
+            <Link
+              href={`/m/visit/${visit.id}/followup`}
+              className="rounded-full bg-[var(--color-section-pink-bg)] px-2.5 py-0.5 text-[11px] font-bold text-[#C0185A]"
+            >
+              + Add
+            </Link>
+          </div>
+          {followUps.length === 0 ? (
+            <p className="text-[12px] italic text-ink-300">No follow-ups for this visit.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {followUps.map((f) => (
+                <li key={f.id} className="flex items-start gap-2 text-[13px]">
+                  <span className="mt-0.5 text-ink-300">
+                    {f.status === 'done' ? '☑' : '☐'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className={`leading-relaxed ${f.status === 'done' ? 'text-ink-300 line-through' : 'text-ink-700'}`}>
+                      {f.title}
+                    </p>
+                    {(f.due_date || f.notes) && (
+                      <p className="text-[11px] text-ink-300 mt-0.5">
+                        {f.due_date && <span>Due {f.due_date}</span>}
+                        {f.due_date && f.notes && <span> · </span>}
+                        {f.notes && <span>{f.notes}</span>}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Other photos (untagged + legacy) */}
+        {otherPhotos.length > 0 && (
+          <div className="rounded-[18px] border border-ink-100 bg-white p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-ink-100 text-sm">
+                📸
+              </span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-ink-400">
+                Other photos
+              </span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto -mx-1 px-1 scrollbar-hide">
+              {otherPhotos.map((p) => {
+                const idx = lightboxIndexByPath.get(p.storage_path) ?? 0;
+                const url = p.url;
+                if (!url) return null;
+                return (
+                  <button
+                    key={p.storage_path}
+                    type="button"
+                    onClick={() => setLightboxIndex(idx)}
+                    className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-ink-100"
+                  >
+                    <Image
+                      src={url}
+                      alt="Photo"
+                      fill
+                      className="object-cover"
+                      sizes="80px"
+                      unoptimized
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
 
