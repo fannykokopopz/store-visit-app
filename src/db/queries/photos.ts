@@ -1,11 +1,19 @@
 import { supabase } from '../client.js';
 
+export type SectionKey =
+  | 'good_news'
+  | 'people_training'
+  | 'competitor'
+  | 'display_stock'
+  | 'follow_up';
+
 export interface VisitPhoto {
   id: string;
   visit_id: string;
   storage_path: string;
   caption: string | null;
   photo_tag: 'display' | 'competitor' | 'stock' | 'staff' | 'other' | null;
+  section_key: SectionKey | null;
   file_size: number | null;
   analyzed_at: string | null;
   created_at: string;
@@ -15,6 +23,7 @@ export async function uploadVisitPhoto(
   visitId: string,
   fileBuffer: Buffer,
   storeId: string,
+  sectionKey: SectionKey | null = null,
 ): Promise<VisitPhoto | null> {
   const photoId = crypto.randomUUID();
   const storagePath = `${storeId}/${visitId}/${photoId}.jpg`;
@@ -37,6 +46,7 @@ export async function uploadVisitPhoto(
       visit_id: visitId,
       storage_path: storagePath,
       file_size: fileBuffer.length,
+      section_key: sectionKey,
     })
     .select()
     .single();

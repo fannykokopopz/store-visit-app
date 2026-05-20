@@ -1,5 +1,5 @@
 import { Api } from 'grammy';
-import { uploadVisitPhoto } from '../db/queries/photos.js';
+import { uploadVisitPhoto, type SectionKey } from '../db/queries/photos.js';
 import { config } from '../config.js';
 
 interface PhotoCollection {
@@ -8,6 +8,8 @@ interface PhotoCollection {
   storeName: string;
   sections: number;
   fileIds: string[];
+  fileSectionMap: Map<string, SectionKey | null>;
+  currentSectionKey: SectionKey | null;
   timer: NodeJS.Timeout | null;
   resolveDone: (n: number) => void;
 }
@@ -51,8 +53,14 @@ export function startPhotoCollection(
   const done = new Promise<number>((r) => { resolveDone = r; });
   pendingResults.set(visitId, done);
 
+  const fileSectionMap = new Map<string, SectionKey | null>();
+  for (const fid of fileIds) fileSectionMap.set(fid, null);
+
   const collection: PhotoCollection = {
-    visitId, storeId, storeName, sections, fileIds, timer: null, resolveDone,
+    visitId, storeId, storeName, sections, fileIds,
+    fileSectionMap,
+    currentSectionKey: null,
+    timer: null, resolveDone,
   };
   collections.set(telegramId, collection);
 
@@ -65,12 +73,20 @@ export function isCollecting(telegramId: number): boolean {
   return collections.has(telegramId);
 }
 
+// Called by the visit conversation as each prompt becomes active. Photos
+// arriving while a section is active inherit that section_key on insert.
+export function setActiveSection(telegramId: number, sectionKey: SectionKey | null): void {
+  const c = collections.get(telegramId);
+  if (c) c.currentSectionKey = sectionKey;
+}
+
 export async function handleIncomingPhoto(telegramId: number, fileId: string): Promise<void> {
   const collection = collections.get(telegramId);
   if (!collection) return;
   if (collection.fileIds.length >= 6) return;
 
   collection.fileIds.push(fileId);
+  collection.fileSectionMap.set(fileId, collection.currentSectionKey);
 
   if (collection.timer) clearTimeout(collection.timer);
   collection.timer = setTimeout(() => finalizeCollection(telegramId), 2000);
@@ -105,7 +121,8 @@ async function finalizeCollection(telegramId: number): Promise<void> {
       const url = `https://api.telegram.org/file/bot${config.telegram.botToken}/${file.file_path}`;
       const resp = await fetch(url);
       const buffer = Buffer.from(await resp.arrayBuffer());
-      await uploadVisitPhoto(collection.visitId, buffer, collection.storeId);
+      const sectionKey = collection.fileSectionMap.get(fileId) ?? null;
+      await uploadVisitPhoto(collection.visitId, buffer, collection.storeId, sectionKey);
       saved++;
     } catch (err) {
       console.error('[photos] upload error:', err);
